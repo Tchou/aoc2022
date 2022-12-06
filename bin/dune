@@ -1,0 +1,5 @@
+(executable
+ (public_name aoc2022)
+ (promote (until-clean))
+ (name main)
+ (libraries aoc2022))

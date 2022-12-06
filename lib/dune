@@ -1,0 +1,3 @@
+(library
+ (library_flags (-linkall))
+ (name aoc2022))

@@ -45,7 +45,7 @@ let rec merge_entries e1 e2 =
 
 let rec apply_path d p =
   match (d, p) with
-  | Dir (dirname, content), Dir (dn2, entries) :: pp ->
+  | Dir (dirname, content), (dn2, entries) :: pp ->
       let others, dd = find_entry content dn2 in
       begin
         match dd with
@@ -58,7 +58,6 @@ let rec apply_path d p =
       end
   | _, [] -> d
   | File (n, _), _ -> failwith (Format.sprintf "Tries to cd into file %s" n)
-  | _, File _ :: _ -> assert false
 
 let get_name = function Dir (n, _) | File (n, _) -> n
 let sort_by_name l = List.sort (fun a b -> compare (get_name a) (get_name b)) l
@@ -85,7 +84,7 @@ let iter_on_dir_size f t =
 
 let sum_size limit t =
   let acc = ref 0 in
-  let f s = if s <= limit then acc := !acc + limit in
+  let f s = if s <= limit then acc := !acc + s in
   iter_on_dir_size f t;
   !acc
 
@@ -94,26 +93,24 @@ let solve compute () =
     match String.split_on_char ' ' (read_line ()) with
     | "$" :: l -> begin
         match (paths, parse_cmd l) with
-        | _, Cd_root -> loop ([ Dir ("/", []) ] :: paths)
+        | _, Cd_root -> loop ([ ("/", []) ] :: paths)
         | (_ :: ppaths) :: _, Cd_up -> loop (ppaths :: paths)
-        | path :: ppaths, Cd name -> loop ((Dir (name, []) :: path) :: ppaths)
+        | path :: ppaths, Cd name -> loop (((name, []) :: path) :: ppaths)
         | _, Ls -> loop paths
         | _ -> assert false
       end
     | "dir" :: _ -> loop paths (* nothing to do for dirs *)
     | [ ssize; name ] -> begin
         match paths with
-        | (Dir (dirname, entries) :: path) :: ppaths ->
-            let ndir =
-              Dir (dirname, File (name, int_of_string ssize) :: entries)
-            in
+        | ((dirname, entries) :: path) :: ppaths ->
+            let ndir = (dirname, File (name, int_of_string ssize) :: entries) in
             loop ((ndir :: path) :: ppaths)
         | _ -> assert false
       end
     | _ -> assert false
     | exception End_of_file -> List.map List.rev (List.rev paths)
   in
-  let paths = loop [ [ Dir ("/", []) ] ] in
+  let paths = loop [ [ ("/", []) ] ] in
   let t = List.fold_left apply_path (Dir ("#", [ Dir ("/", []) ])) paths in
   let t = match t with Dir ("#", [ e ]) -> e | _ -> assert false in
   Format.printf "%d@\n" (compute t)
@@ -121,18 +118,17 @@ let solve compute () =
 let name = "07a"
 let () = Solution.register name (solve (sum_size 100000))
 
-let find_dir total needed  t =
+let find_dir total needed t =
   let acc = ref [] in
-  let f size = acc := size ::!acc in
+  let f size = acc := size :: !acc in
   iter_on_dir_size f t;
   match !acc with
-   root_size :: rest ->
-    let available = total - root_size in
-    assert (available < needed);
-    let l = List.sort compare rest in
-    List.find (fun s -> s + available >= needed) l
-    | _ -> assert false
-
+  | root_size :: rest ->
+      let available = total - root_size in
+      assert (available < needed);
+      let l = List.sort compare rest in
+      List.find (fun s -> s + available >= needed) l
+  | _ -> assert false
 
 let name = "07b"
 let () = Solution.register name (solve (find_dir 70000000 30000000))

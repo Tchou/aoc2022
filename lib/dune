@@ -1,3 +1,4 @@
 (library
  (library_flags (-linkall))
- (name aoc2022))
+ (name aoc2022)
+ (libraries unix))

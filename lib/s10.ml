@@ -10,9 +10,7 @@ let solve compute get_result () =
         let v = int_of_string sv in
         loop (current_cycle + 2) (current_value + v)
     | _ -> assert false
-    | exception End_of_file ->
-        (* compute current_cycle current_value; *)
-        get_result ()
+    | exception End_of_file -> get_result ()
   in
   let res = loop 1 1 in
   Format.printf "%d@\n" res

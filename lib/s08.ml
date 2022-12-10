@@ -45,16 +45,16 @@ let all_count a =
   !total
 
 let solve f () =
-  let rec loop acc =
-    match read_line () with
-    | s ->
-        loop
-          ((s |> String.to_seq |> Array.of_seq
-           |> Array.map (fun x -> Char.code x - Char.code '0'))
-          :: acc)
-    | exception End_of_file -> Array.of_list (List.rev acc)
+  let res =
+    Utils.fold_lines
+      (fun acc s ->
+        (s |> String.to_seq |> Array.of_seq
+        |> Array.map (fun x -> Char.code x - Char.code '0'))
+        :: acc)
+      []
   in
-  Printf.printf "%d\n" (f (loop []))
+  let res = Array.of_list (List.rev res) in
+  Printf.printf "%d\n" (f res)
 
 let name = "08a"
 let () = Solution.register name (solve all_count)

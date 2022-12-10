@@ -89,17 +89,14 @@ let dir_of_string = function
 
 let solve n () =
   let config = make_config n in
-  let rec loop () =
-    match String.split_on_char ' ' (read_line ()) with
-    | [ sdir; sn ] ->
-        let d = dir_of_string sdir in
-        let n = int_of_string sn in
-        move_n sdir config d n;
-        loop ()
-    | _ -> loop ()
-    | exception End_of_file -> ()
-  in
-  loop ();
+  Utils.fold_fields ' '
+    (fun () -> function
+      | [ sdir; sn ] ->
+          let d = dir_of_string sdir in
+          let n = int_of_string sn in
+          move_n sdir config d n
+      | _ -> ())
+    ();
   let r = Hashtbl.length config.grid in
   Printf.printf "%d\n" r
 
@@ -108,6 +105,8 @@ let () = Solution.register name (solve 2)
 let name = "09b"
 let () = Solution.register name (solve 10)
 
+
+(** Longer code to animate the rope in the terminal *)
 let animate n () =
   let rec loop acc r c max_r max_c min_r min_c =
     match String.split_on_char ' ' (read_line ()) with
@@ -123,7 +122,7 @@ let animate n () =
         let num_row = abs (max_r - min_r) in
         let num_col = abs (max_c - min_c) in
 
-        (List.rev acc, (num_row, num_col), 2*num_row, 2*num_col)
+        (List.rev acc, (num_row, num_col), 2 * num_row, 2 * num_col)
   in
   let cmd, orig, num_row, num_col = loop [] 0 0 0 0 0 0 in
   let config = make_config ~orig n in
@@ -142,13 +141,3 @@ let animate n () =
 
 let name = "09c"
 let () = Solution.register name (animate 10)
-
-(*****
-
-         7
-
-  -5                   10
-        -2
-
-  15 * 9
-*)

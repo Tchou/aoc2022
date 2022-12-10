@@ -14,21 +14,24 @@ let compare m1 m2 =
   | Paper, Rock | Rock, Scissors | Scissors, Paper -> 1
   | Rock, Rock | Scissors, Scissors | Paper, Paper -> 0
 
-let solve () =
-  let rec loop total =
-    match String.split_on_char ' ' (read_line ()) with
-    | [ op; my ] ->
-        let c = compare (of_letter op) (of_letter my) in
-        let nscore = if c = 0 then 3 else if c < 0 then 6 else 0 in
-        let nscore = total + nscore + score (of_letter my) in
-        loop nscore
-    | _ -> loop total
-    | exception End_of_file -> total
+let decide1 old_score op_move my_move_s =
+  let my_move = of_letter my_move_s in
+  let c = compare op_move my_move in
+  let points = if c = 0 then 3 else if c < 0 then 6 else 0 in
+  old_score + points + score my_move
+
+let solve decide () =
+  let total =
+    Utils.fold_fields ' '
+      (fun total -> function
+        | [ op; my ] -> decide total (of_letter op) my
+        | _ -> total)
+      0
   in
-  Printf.printf "%d\n" (loop 0)
+  Printf.printf "%d\n" total
 
 let name = "02a"
-let () = Solution.register name solve
+let () = Solution.register name (solve decide1)
 
 type result = Draw | Win | Loose
 
@@ -38,29 +41,25 @@ let r_of_letter = function
   | "Z" -> Win
   | s -> failwith ("Invalid result: '" ^ s ^ "'")
 
-let decide m r =
-  match r with
-  | Win -> (
-      match m with Rock -> Paper | Paper -> Scissors | Scissors -> Rock)
-  | Draw -> m
-  | Loose -> (
-      match m with Paper -> Rock | Scissors -> Paper | Rock -> Scissors)
-
-let solve () =
-  let rec loop total =
-    match String.split_on_char ' ' (read_line ()) with
-    | [ op; my ] ->
-        let mop = of_letter op in
-        let res = r_of_letter my in
-        let mmy = decide mop res in
-        let c = compare mop mmy in
-        let nscore = if c = 0 then 3 else if c < 0 then 6 else 0 in
-        let nscore = total + nscore + score mmy in
-        loop nscore
-    | _ -> loop total
-    | exception End_of_file -> total
+let decide2 old_score op_move my_move_s =
+  let r = r_of_letter my_move_s in
+  let my_move =
+    match r with
+    | Win -> (
+        match op_move with
+        | Rock -> Paper
+        | Paper -> Scissors
+        | Scissors -> Rock)
+    | Draw -> op_move
+    | Loose -> (
+        match op_move with
+        | Paper -> Rock
+        | Scissors -> Paper
+        | Rock -> Scissors)
   in
-  Printf.printf "%d\n" (loop 0)
+  let c = compare op_move my_move in
+  let points = if c = 0 then 3 else if c < 0 then 6 else 0 in
+  old_score + points + score my_move
 
 let name = "02b"
-let () = Solution.register name solve
+let () = Solution.register name (solve decide2)

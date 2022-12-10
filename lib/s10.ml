@@ -1,18 +1,19 @@
 let solve compute get_result () =
-  let rec loop current_cycle current_value =
-    match String.split_on_char ' ' (read_line ()) with
-    | [ "noop" ] ->
-        compute current_cycle current_value;
-        loop (current_cycle + 1) current_value
-    | [ "addx"; sv ] ->
-        compute current_cycle current_value;
-        compute (current_cycle + 1) current_value;
-        let v = int_of_string sv in
-        loop (current_cycle + 2) (current_value + v)
-    | _ -> assert false
-    | exception End_of_file -> get_result ()
+  let _ =
+    Utils.fold_fields ' '
+      (fun (current_cycle, current_value) -> function
+        | [ "noop" ] ->
+            compute current_cycle current_value;
+            (current_cycle + 1, current_value)
+        | [ "addx"; sv ] ->
+            compute current_cycle current_value;
+            compute (current_cycle + 1) current_value;
+            let v = int_of_string sv in
+            (current_cycle + 2, current_value + v)
+        | _ -> assert false)
+      (1, 1)
   in
-  let res = loop 1 1 in
+  let res = get_result () in
   Format.printf "%d@\n" res
 
 let compute1, get_result1 =

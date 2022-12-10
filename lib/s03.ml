@@ -25,19 +25,19 @@ let priority c =
   else Char.code c - Char.code 'A' + 27
 
 let solve () =
-  let rec loop total =
-    match read_line () with
-    | s -> (
+  let res =
+    Utils.fold_lines
+      (fun total s ->
         let l = String.length s in
         let bag1 = String.sub s 0 (l / 2) in
         let bag2 = String.sub s (l / 2) (l / 2) in
         let map = mark_present bag1 in
         match find_present 1 bag2 map with
-        | None -> loop total
-        | Some c -> loop (total + priority c))
-    | exception End_of_file -> total
+        | None -> total
+        | Some c -> total + priority c)
+      0
   in
-  Printf.printf "%d\n" (loop 0)
+  Printf.printf "%d\n" res
 
 let name = "03a"
 let () = Solution.register name solve
@@ -70,9 +70,7 @@ let solve () =
           with Found c -> Some c
         with
         | None -> assert false
-        | Some c ->
-            
-            loop (total + priority c))
+        | Some c -> loop (total + priority c))
     | exception End_of_file -> total
   in
   Printf.printf "%d\n" (loop 0)

@@ -40,18 +40,18 @@ end
 
 let solve n () =
   let q = CBuff.create n in
-  let rec loop i =
-    match input_char stdin with
-    | c ->
+  let res =
+    Utils.fold_chars
+      (fun i c ->
         CBuff.insert_unique q c;
         let len = CBuff.length q in
         if len = n then i
         else
           let () = if len > n then ignore (CBuff.take_front q) in
-          loop (i + 1)
-    | exception End_of_file -> assert false
+          i + 1)
+      1
   in
-  Printf.printf "%d\n" (loop 1)
+  Printf.printf "%d\n" res
 
 let name = "06a"
 let () = Solution.register name (solve 4)

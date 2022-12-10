@@ -7,15 +7,17 @@ let replace_min a v =
 
 let solve len () =
   let arr_max = Array.make len 0 in
-  let rec loop current_sum =
-    match read_line () with
-    | "" ->
-        replace_min arr_max current_sum;
-        loop 0
-    | i -> loop (current_sum + int_of_string i)
-    | exception _ -> Array.fold_left ( + ) 0 arr_max
+  let _ =
+    Utils.fold_lines
+      (fun current_sum -> function
+        | "" ->
+            replace_min arr_max current_sum;
+            0
+        | i -> current_sum + int_of_string i)
+      0
   in
-  Printf.printf "%d\n" (loop 0)
+  let sum = Array.fold_left ( + ) 0 arr_max in
+  Printf.printf "%d\n" sum
 
 let name = "01a"
 let () = Solution.register name (solve 1)

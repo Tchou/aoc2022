@@ -89,28 +89,31 @@ let sum_size limit t =
   !acc
 
 let solve compute () =
-  let rec loop paths =
-    match String.split_on_char ' ' (read_line ()) with
-    | "$" :: l -> begin
-        match (paths, parse_cmd l) with
-        | _, Cd_root -> loop ([ ("/", []) ] :: paths)
-        | (_ :: ppaths) :: _, Cd_up -> loop (ppaths :: paths)
-        | path :: ppaths, Cd name -> loop (((name, []) :: path) :: ppaths)
-        | _, Ls -> loop paths
-        | _ -> assert false
-      end
-    | "dir" :: _ -> loop paths (* nothing to do for dirs *)
-    | [ ssize; name ] -> begin
-        match paths with
-        | ((dirname, entries) :: path) :: ppaths ->
-            let ndir = (dirname, File (name, int_of_string ssize) :: entries) in
-            loop ((ndir :: path) :: ppaths)
-        | _ -> assert false
-      end
-    | _ -> assert false
-    | exception End_of_file -> List.map List.rev (List.rev paths)
+  let paths =
+    Utils.fold_fields ' '
+      (fun paths -> function
+        | "$" :: l -> begin
+            match (paths, parse_cmd l) with
+            | _, Cd_root -> [ ("/", []) ] :: paths
+            | (_ :: ppaths) :: _, Cd_up -> ppaths :: paths
+            | path :: ppaths, Cd name -> ((name, []) :: path) :: ppaths
+            | _, Ls -> paths
+            | _ -> assert false
+          end
+        | "dir" :: _ -> paths (* nothing to do for dirs *)
+        | [ ssize; name ] -> begin
+            match paths with
+            | ((dirname, entries) :: path) :: ppaths ->
+                let ndir =
+                  (dirname, File (name, int_of_string ssize) :: entries)
+                in
+                (ndir :: path) :: ppaths
+            | _ -> assert false
+          end
+        | _ -> assert false)
+      [ [ ("/", []) ] ]
   in
-  let paths = loop [ [ ("/", []) ] ] in
+  let paths = List.map List.rev (List.rev paths) in
   let t = List.fold_left apply_path (Dir ("#", [ Dir ("/", []) ])) paths in
   let t = match t with Dir ("#", [ e ]) -> e | _ -> assert false in
   Format.printf "%d@\n" (compute t)

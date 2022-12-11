@@ -101,9 +101,8 @@ let pp_config row_num col_num fmt config =
   for row = 0 to row_num - 1 do
     for col = 0 to col_num - 1 do
       let c =
-        try List.assoc (row, col) lm
-        with Not_found ->
-          if Hashtbl.mem config.grid (row, col) then '#' else '.'
+        try List.assoc (row, col) lm with
+        | Not_found -> if Hashtbl.mem config.grid (row, col) then '#' else '.'
       in
       Format.fprintf fmt "%c" c
     done;

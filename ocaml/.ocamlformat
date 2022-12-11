@@ -1,1 +1,4 @@
-exp-grouping=preserve
+exp-grouping = preserve
+parens-tuple-patterns = multi-line-only
+parens-tuple = multi-line-only
+

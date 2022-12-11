@@ -83,8 +83,8 @@ let mk_operation = function
       let arg1 = mk_arg arg1_s in
       let arg2 = mk_arg arg2_s in
       fun div x ->
-        let v1 = match arg1 with None -> x | Some v -> v in
-        let v2 = match arg2 with None -> x | Some v -> v in
+        let v1 = Option.value arg1 ~default:x in
+        let v2 = Option.value arg2 ~default:x in
         op (v1 mod div) (v2 mod div) mod div
   | _ -> failwith "Invalid compute syntax"
 

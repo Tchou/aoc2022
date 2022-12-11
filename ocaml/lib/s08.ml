@@ -1,14 +1,14 @@
 (** Generic interation row/column -wise, forward/backward *)
-let init_col_fwd row _a = (row, 0)
+let init_col_fwd row _a = row, 0
 
-let init_col_bwd row a = (row, Array.length a.(row) - 1)
+let init_col_bwd row a = row, Array.length a.(row) - 1
 
 let fwd_col a (r, c) =
   if c >= Array.length a.(r) then None else Some ((r, c + 1), a.(r).(c))
 
 let bwd_col a (r, c) = if c < 0 then None else Some ((r, c - 1), a.(r).(c))
-let init_row_fwd col _a = (0, col)
-let init_row_bwd col a = (Array.length a - 1, col)
+let init_row_fwd col _a = 0, col
+let init_row_bwd col a = Array.length a - 1, col
 
 let fwd_row a (r, c) =
   if r >= Array.length a then None else Some ((r + 1, c), a.(r).(c))
@@ -18,15 +18,11 @@ let bwd_row a (r, c) = if r < 0 then None else Some ((r - 1, c), a.(r).(c))
 (* Iterate a function in all directions *)
 let iter_all_directions f tab =
   for col = 0 to Array.length tab.(0) - 1 do
-    f tab fwd_row (init_row_fwd col)
-  done;
-  for col = Array.length tab.(0) - 1 downto 0 do
+    f tab fwd_row (init_row_fwd col);
     f tab bwd_row (init_row_bwd col)
   done;
   for row = 0 to Array.length tab - 1 do
-    f tab fwd_col (init_col_fwd row)
-  done;
-  for row = Array.length tab - 1 downto 0 do
+    f tab fwd_col (init_col_fwd row);
     f tab bwd_col (init_col_bwd row)
   done
 

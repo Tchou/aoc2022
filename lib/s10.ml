@@ -9,7 +9,7 @@ let solve compute get_result () =
             compute current_cycle current_value;
             compute (current_cycle + 1) current_value;
             let v = int_of_string sv in
-            (current_cycle + 2, current_value + v)
+              (current_cycle + 2, current_value + v)
         | _ -> assert false)
       (1, 1)
   in
@@ -39,7 +39,7 @@ let compute2 cur_cycle cur_value =
   in
   if line_pos = 0 then Format.printf "%3d: " cur_cycle;
   Format.printf "%s" c;
-  if line_pos = 39 then Format.printf "@\n"
+  if line_pos = 39 then Format.printf "%-3d@\n" cur_cycle
 
 let name = "10b"
 

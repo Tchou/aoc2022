@@ -15,7 +15,7 @@ type monkey = {
    This could be made even more general in cases wher for all di,
    the multiplicative inverse with the reducer (3 in the problem) is
    defined.
-   I don't bother since the problem does not require it.   
+   I don't bother since the problem does not require it.
 *)
 
 let pp_number fmt l =
@@ -160,7 +160,10 @@ let solve reducer rounds () =
   let mb = monkey_business monkeys in
   Format.printf "%d\n" mb
 
-let name = "11_part1"
-let () = Solution.register name (solve 3 20)
-let name = "11_part2"
-let () = Solution.register name (solve 1 10000)
+module Sol = struct
+  let name = "11"
+  let solve_part1 = solve 3 20
+  let solve_part2 = solve 1 10000
+end
+
+let () = Solution.register_mod (module Sol)

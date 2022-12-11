@@ -72,7 +72,7 @@ let debug a s =
   Format.eprintf "%a@\n" print_array a;
   Unix.sleepf 0.5
 
-let solve do_n_move ?(animate = false) () =
+let solve ?(animate = false) do_n_move () =
   let a = load_level () in
   let () = if animate then debug a "" in
   Utils.fold_fields ' '
@@ -90,11 +90,6 @@ let solve do_n_move ?(animate = false) () =
   let res = String.concat "" lf in
   Format.printf "%s\n%!" res
 
-let name = "05_part1"
-let () = Solution.register name (solve move_9000)
-let name = "05_part1_animate"
-let () = Solution.register name (solve ~animate:true move_9000)
-
 let split_n l n =
   let rec loop n l acc =
     if n = 0 then (acc, l)
@@ -111,7 +106,13 @@ let move_9001 a i j n =
   a.(i) <- staying;
   a.(j) <- dest
 
-let name = "05_part2"
-let () = Solution.register name (solve move_9001)
-let name = "05_part2_animate"
-let () = Solution.register name (solve ~animate:true move_9001)
+module Sol = struct
+  let name = "05"
+  let solve_part1 = solve move_9000
+  let solve_part2 = solve move_9001
+end
+
+let () =
+  Solution.register_mod (module Sol);
+  Solution.register "05_part1_animate" (solve ~animate:true move_9000);
+  Solution.register "05_part2_animate" (solve ~animate:true move_9001)

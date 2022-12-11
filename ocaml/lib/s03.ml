@@ -1,76 +1,76 @@
-let process_present a f s =
-  for i = 0 to String.length s - 1 do
-    let idx = Char.code s.[i] in
-    a.(idx) <- f a.(idx)
-  done;
-  a
+module Sol = struct
+  let name = "03"
 
-let mark_present s = process_present (Array.make 256 0) (fun _ -> 1) s
-
-exception Found of char
-
-let find_present value s map =
-  try
+  let process_present a f s =
     for i = 0 to String.length s - 1 do
-      let c = s.[i] in
-      let idx = Char.code c in
-      if map.(idx) = value then raise (Found c)
+      let idx = Char.code s.[i] in
+      a.(idx) <- f a.(idx)
     done;
-    None
-  with Found c -> Some c
+    a
 
-let priority c =
-  assert ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'));
-  if c >= 'a' then Char.code c - Char.code 'a' + 1
-  else Char.code c - Char.code 'A' + 27
+  let mark_present s = process_present (Array.make 256 0) (fun _ -> 1) s
 
-let solve () =
-  let res =
-    Utils.fold_lines
-      (fun total s ->
-        let l = String.length s in
-        let bag1 = String.sub s 0 (l / 2) in
-        let bag2 = String.sub s (l / 2) (l / 2) in
-        let map = mark_present bag1 in
-        match find_present 1 bag2 map with
-        | None -> total
-        | Some c -> total + priority c)
-      0
-  in
-  Printf.printf "%d\n" res
+  exception Found of char
 
-let name = "03_part1"
-let () = Solution.register name solve
+  let find_present value s map =
+    try
+      for i = 0 to String.length s - 1 do
+        let c = s.[i] in
+        let idx = Char.code c in
+        if map.(idx) = value then raise (Found c)
+      done;
+      None
+    with Found c -> Some c
 
-let print_array fmt a =
-  for i = 0 to Array.length a - 1 do
-    let v = a.(i) in
-    if v <> 0 then Format.fprintf fmt "%C(%d)" (Char.chr i) a.(i)
-  done
+  let priority c =
+    assert ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'));
+    if c >= 'a' then Char.code c - Char.code 'a' + 1
+    else Char.code c - Char.code 'A' + 27
 
-let solve () =
-  let rec loop total =
-    match
-      let l1 = read_line () in
-      let l2 = read_line () in
-      let l3 = read_line () in
-      (l1, l2, l3)
-    with
-    | l1, l2, l3 -> (
-        let map1 = mark_present l1 in
-        let map2 = mark_present l2 in
-        let map3 = mark_present l3 in
-        match
-          for i = 0 to 255 do
-            if map1.(i) > 0 && map2.(i) > 0 && map3.(i) > 0 then
-              raise_notrace (Found (Char.chr i))
-          done
-        with
-        | () -> assert false
-        | exception Found c -> loop (total + priority c))
-    | exception End_of_file -> total
-  in
-  Printf.printf "%d\n" (loop 0)
+  let solve_part1 () =
+    let res =
+      Utils.fold_lines
+        (fun total s ->
+          let l = String.length s in
+          let bag1 = String.sub s 0 (l / 2) in
+          let bag2 = String.sub s (l / 2) (l / 2) in
+          let map = mark_present bag1 in
+          match find_present 1 bag2 map with
+          | None -> total
+          | Some c -> total + priority c)
+        0
+    in
+    Printf.printf "%d\n" res
 
-let name = "03_part2"
-let () = Solution.register name solve
+  let print_array fmt a =
+    for i = 0 to Array.length a - 1 do
+      let v = a.(i) in
+      if v <> 0 then Format.fprintf fmt "%C(%d)" (Char.chr i) a.(i)
+    done
+
+  let solve_part2 () =
+    let rec loop total =
+      match
+        let l1 = read_line () in
+        let l2 = read_line () in
+        let l3 = read_line () in
+        (l1, l2, l3)
+      with
+      | l1, l2, l3 -> (
+          let map1 = mark_present l1 in
+          let map2 = mark_present l2 in
+          let map3 = mark_present l3 in
+          match
+            for i = 0 to 255 do
+              if map1.(i) > 0 && map2.(i) > 0 && map3.(i) > 0 then
+                raise_notrace (Found (Char.chr i))
+            done
+          with
+          | () -> assert false
+          | exception Found c -> loop (total + priority c))
+      | exception End_of_file -> total
+    in
+    Printf.printf "%d\n" (loop 0)
+end
+
+let () = Solution.register_mod (module Sol)

@@ -6,11 +6,19 @@ import solution
 
 if __name__ == "__main__":
     if len(argv) == 2:
-        f = solution.get(argv[1])
+        arg = argv[1]
+        if arg == "list":
+            print("Available solutions:")
+            for l in solution.list():
+                print("    ", l)
+
+            exit(0)
+
+        f = solution.get(argv)
         if f is None:
-            print ("No solution", argv[1], "registered")
+            print("Error: unknown solution", arg)
             exit(1)
         f()
     else:
-            print (f"Usage: python3 {argv[0]} [problem_name]")
-            exit (2)
+        print(f"Usage: python3 {argv[0]} [problem_name]")
+        exit(2)

@@ -17,7 +17,7 @@ let decide1 old_score op_move my_move_s =
   let my_move = of_letter my_move_s in
   old_score + score_move op_move my_move
 
-let solve decide () =
+let solve decide =
   let total =
     Utils.fold_fields ' '
       (fun total -> function
@@ -26,9 +26,6 @@ let solve decide () =
       0
   in
   Printf.printf "%d\n" total
-
-let name = "02_part1"
-let () = Solution.register name (solve decide1)
 
 let decide2 old_score op_move my_move_s =
   let my_move =
@@ -40,5 +37,10 @@ let decide2 old_score op_move my_move_s =
   in
   old_score + score_move op_move my_move
 
-let name = "02_part2"
-let () = Solution.register name (solve decide2)
+module Sol = struct
+  let name = "02"
+  let solve_part1 () = solve decide1
+  let solve_part2 () = solve decide2
+end
+
+let () = Solution.register_mod (module Sol)

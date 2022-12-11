@@ -8,7 +8,9 @@ def get(name):
         return __SOLUTIONS[name]
     return None
 
-
+def list():
+    return sorted(__SOLUTIONS.keys())
+    
 for mod in range(1, 26):
     try:
         mod_name = f"s{mod:02}"

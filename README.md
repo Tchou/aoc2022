@@ -17,8 +17,18 @@ $ dune exec --display=quiet -- bin/main.exe 11_part2 < ../inputs/input_11.txt
 The expected solution for the input is printed on `stdout`.
 
 ### Python
-Only Python >= 3.8 is required
+Only Python >= 3.8 is required. Run with
+```
+$ cd python
+$ ./main.py 04_part2 < ../inputs/input_04.txt
+```
+The expected solution for the input is printed on `stdout`
 
+#### Variants
+
+Some solutions have an `_animate` variant when the
+solution is graphical.  You can list all available solution variants
+with using `list` as a solution name.
 
 ## Inputs
 The `input` directory contains several kind of files.

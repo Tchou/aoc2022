@@ -64,7 +64,8 @@ let solve n () =
   in
   Printf.printf "%d\n" (loop 1)
 
-let name = "06_part1"
-let () = Solution.register name (solve 4)
-let name = "06_part2"
-let () = Solution.register name (solve 14)
+module Sol = struct
+  let name = "06"
+  let solve_part1 = solve 4
+  let solve_part2 = solve 14
+end

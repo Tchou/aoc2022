@@ -1,5 +1,7 @@
 type command = Cd_root | Cd_up | Cd of string | Ls
-type entry = Dir of string * entry list | File of string * int
+
+type entry = Dir of entries | File of int
+and entries = (string * entry) list
 
 let parse_cmd = function
   | [ "cd"; "/" ] -> Cd_root
@@ -10,33 +12,23 @@ let parse_cmd = function
 
 let rec find_entry entries dirname =
   match entries with
-  | [] -> ([], Dir (dirname, []))
-  | Dir (dn, files) :: rest when dn = dirname -> (rest, Dir (dn, files))
+  | [] -> ([], Dir [])
+  | (dn, Dir files) :: rest when dn = dirname -> (rest, Dir files)
   | p :: rest ->
       let others, d = find_entry rest dirname in
       (p :: others, d)
 
-let compare_entries a b =
-  match (a, b) with
-  | File (f1, s1), File (f2, s2) ->
-      let c = compare f1 f2 in
-      if c = 0 then assert (s1 = s2);
-      c
-  | Dir (d1, _), Dir (d2, _) -> compare d1 d2
-  | File _, Dir _ -> -1
-  | Dir _, File _ -> 1
-
 let rec merge_entries e1 e2 =
-  let e1 = List.sort compare_entries e1 in
-  let e2 = List.sort compare_entries e2 in
+  let e1 = List.sort compare e1 in
+  let e2 = List.sort compare e2 in
   let rec loop l1 l2 =
     match (l1, l2) with
     | [], _ -> l2
     | _, [] -> l1
-    | Dir (d1, ee1) :: ll1, Dir (d2, ee2) :: ll2 when d1 = d2 ->
-        Dir (d1, merge_entries ee1 ee2) :: loop ll1 ll2
+    | (d1, Dir ee1) :: ll1, (d2, Dir ee2) :: ll2 when d1 = d2 ->
+        (d1, Dir (merge_entries ee1 ee2)) :: loop ll1 ll2
     | e1 :: ll1, e2 :: ll2 ->
-        let c = compare_entries e1 e2 in
+        let c = compare e1 e2 in
         if c = 0 then e1 :: loop ll1 ll2
         else if c < 0 then e1 :: loop ll1 l2
         else e2 :: loop l1 ll2
@@ -45,38 +37,35 @@ let rec merge_entries e1 e2 =
 
 let rec apply_path d p =
   match (d, p) with
-  | Dir (dirname, content), (dn2, entries) :: pp ->
+  | Dir content, (dn2, new_entries) :: pp ->
       let others, dd = find_entry content dn2 in
       begin
         match dd with
-        | Dir (_, entries2) ->
-            let nentries = merge_entries entries entries2 in
-            let ndd = Dir (dn2, nentries) in
-            let nndd = apply_path ndd pp in
-            Dir (dirname, nndd :: others)
+        | Dir old_entries ->
+            let entries = merge_entries old_entries new_entries in
+            let new_dir = apply_path (Dir entries) pp in
+            Dir ((dn2, new_dir) :: others)
         | File _ -> assert false
       end
   | _, [] -> d
-  | File (n, _), _ -> failwith (Format.sprintf "Tries to cd into file %s" n)
+  | File _, _ -> failwith (Format.sprintf "Tries to cd into a file")
 
-let get_name = function Dir (n, _) | File (n, _) -> n
-let sort_by_name l = List.sort (fun a b -> compare (get_name a) (get_name b)) l
-
-let rec pp_tree fmt t =
+let rec pp_entry fmt t =
   match t with
-  | Dir (n, entries) ->
-      let entries = sort_by_name entries in
-      Format.fprintf fmt "- %s (dir)@[@\n" n;
-      List.iter (fun e -> Format.fprintf fmt "%a" pp_tree e) entries;
-      Format.fprintf fmt "@]@\n"
-  | File (n, s) -> Format.fprintf fmt "@[- %s (size=%d)@]@\n" n s
+  | Dir entries -> entries |> List.sort compare |> pp_tree fmt
+  | File s -> Format.fprintf fmt "(size=%d)" s
+
+and pp_tree fmt l =
+  List.iter
+    (fun (name, e) -> Format.fprintf fmt "@[- %s @[%a@]@\n" name pp_entry e)
+    l
 
 let iter_on_dir_size f t =
   let rec loop t =
     match t with
-    | File (_, s) -> s
-    | Dir (_, entries) ->
-        let size = List.fold_left (fun acc e -> acc + loop e) 0 entries in
+    | File s -> s
+    | Dir entries ->
+        let size = List.fold_left (fun acc (_, e) -> acc + loop e) 0 entries in
         f size;
         size
   in
@@ -87,6 +76,18 @@ let sum_size limit t =
   let f s = if s <= limit then acc := !acc + s in
   iter_on_dir_size f t;
   !acc
+
+let find_dir total needed t =
+  let acc = ref [] in
+  let f size = acc := size :: !acc in
+  iter_on_dir_size f t;
+  match !acc with
+  | root_size :: rest ->
+      let available = total - root_size in
+      assert (available < needed);
+      let l = List.sort compare rest in
+      List.find (fun s -> s + available >= needed) l
+  | _ -> assert false
 
 let solve compute () =
   let paths =
@@ -105,7 +106,7 @@ let solve compute () =
             match paths with
             | ((dirname, entries) :: path) :: ppaths ->
                 let ndir =
-                  (dirname, File (name, int_of_string ssize) :: entries)
+                  (dirname, (name, File (int_of_string ssize)) :: entries)
                 in
                 (ndir :: path) :: ppaths
             | _ -> assert false
@@ -114,24 +115,14 @@ let solve compute () =
       [ [ ("/", []) ] ]
   in
   let paths = List.map List.rev (List.rev paths) in
-  let t = List.fold_left apply_path (Dir ("#", [ Dir ("/", []) ])) paths in
-  let t = match t with Dir ("#", [ e ]) -> e | _ -> assert false in
+  let t = List.fold_left apply_path (Dir [ ("/", Dir []) ]) paths in
+  let _, t = match t with Dir [ e ] -> e | _ -> assert false in
   Format.printf "%d@\n" (compute t)
 
-let name = "07_part1"
-let () = Solution.register name (solve (sum_size 100000))
+module Sol = struct
+  let name = "07"
+  let solve_part1 = solve (sum_size 100000)
+  let solve_part2 = solve (find_dir 70000000 30000000)
+end
 
-let find_dir total needed t =
-  let acc = ref [] in
-  let f size = acc := size :: !acc in
-  iter_on_dir_size f t;
-  match !acc with
-  | root_size :: rest ->
-      let available = total - root_size in
-      assert (available < needed);
-      let l = List.sort compare rest in
-      List.find (fun s -> s + available >= needed) l
-  | _ -> assert false
-
-let name = "07_part2"
-let () = Solution.register name (solve (find_dir 70000000 30000000))
+let () = Solution.register_mod (module Sol)

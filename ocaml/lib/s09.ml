@@ -36,24 +36,6 @@ let closer head tail =
 
 let touch_grid grid pos = Hashtbl.replace grid pos ()
 
-let pp_config row_num col_num fmt config =
-  let lm =
-    List.mapi
-      (fun i pos -> (pos, if i = 0 then 'H' else Char.chr (i + Char.code '0')))
-      config.rope
-  in
-  for row = 0 to row_num - 1 do
-    for col = 0 to col_num - 1 do
-      let c =
-        try List.assoc (row, col) lm
-        with Not_found ->
-          if Hashtbl.mem config.grid (row, col) then '#' else '.'
-      in
-      Format.fprintf fmt "%c" c
-    done;
-    Format.fprintf fmt "\n"
-  done
-
 let move head tail =
   let d1, d2 = dist head tail in
   if d1 <= 1 && d2 <= 1 then tail else tail ++ closer head tail
@@ -100,13 +82,34 @@ let solve n () =
   let r = Hashtbl.length config.grid in
   Printf.printf "%d\n" r
 
-let name = "09_part1"
-let () = Solution.register name (solve 2)
-let name = "09_part2"
-let () = Solution.register name (solve 10)
+module Sol = struct
+  let name = "09"
+  let solve_part1 = solve 2
+  let solve_part2 = solve 10
+end
 
+let () = Solution.register_mod (module Sol)
 
 (** Longer code to animate the rope in the terminal *)
+
+let pp_config row_num col_num fmt config =
+  let lm =
+    List.mapi
+      (fun i pos -> (pos, if i = 0 then 'H' else Char.chr (i + Char.code '0')))
+      config.rope
+  in
+  for row = 0 to row_num - 1 do
+    for col = 0 to col_num - 1 do
+      let c =
+        try List.assoc (row, col) lm
+        with Not_found ->
+          if Hashtbl.mem config.grid (row, col) then '#' else '.'
+      in
+      Format.fprintf fmt "%c" c
+    done;
+    Format.fprintf fmt "\n"
+  done
+
 let animate n () =
   let rec loop acc r c max_r max_c min_r min_c =
     match String.split_on_char ' ' (read_line ()) with
@@ -130,9 +133,7 @@ let animate n () =
     List.fold_left
       (fun config (d, n) ->
         Format.printf "%s%!" Utils.clear_screen;
-        Format.printf "%a@\n%!"
-          (pp_config num_row num_col)
-          config;
+        Format.printf "%a@\n%!" (pp_config num_row num_col) config;
         move_n "" config d n;
         Unix.sleepf 0.125;
         config)

@@ -5,7 +5,7 @@ let parse_interval s =
   | [ s1; s2 ] -> (int_of_string s1, int_of_string s2)
   | _ -> failwith ("Invalid interval: " ^ s)
 
-let solve test_interval () =
+let solve test_interval =
   let res =
     Utils.fold_fields ','
       (fun total -> function
@@ -18,12 +18,12 @@ let solve test_interval () =
   in
   Printf.printf "%d\n" res
 
-let name = "04_part1"
-let () = Solution.register name (solve overlap)
+let intersect (a, b) (c, d) = (a <= c && c <= b) || (c <= a && a <= d)
 
-let intersect (a, b) (c, d) =
-  let _, b, c, _ = if a < c then (a, b, c, d) else (c, d, a, b) in
-  b >= c
+module Sol = struct
+  let name = "04"
+  let solve_part1 () = solve overlap
+  let solve_part2 () = solve intersect
+end
 
-let name = "04_part2"
-let () = Solution.register name (solve intersect)
+let () = Solution.register_mod (module Sol)

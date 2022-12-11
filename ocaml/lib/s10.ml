@@ -9,7 +9,7 @@ let solve compute get_result () =
             compute current_cycle current_value;
             compute (current_cycle + 1) current_value;
             let v = int_of_string sv in
-              (current_cycle + 2, current_value + v)
+            (current_cycle + 2, current_value + v)
         | _ -> assert false)
       (1, 1)
   in
@@ -28,9 +28,6 @@ let compute1, get_result1 =
   let g1 () = !total in
   (c1, g1)
 
-let name = "10_part1"
-let () = Solution.register name (solve compute1 get_result1)
-
 let compute2 cur_cycle cur_value =
   let line_pos = (cur_cycle - 1) mod 40 in
   let c =
@@ -40,10 +37,14 @@ let compute2 cur_cycle cur_value =
   Format.printf "%s" c;
   if line_pos = 39 then Format.printf "%-3d@\n" cur_cycle
 
-let name = "10_part2"
+module Sol = struct
+  let name = "10"
+  let solve_part1 = solve compute1 get_result1
 
-let () =
-  Solution.register name
-    (solve compute2 (fun () ->
-         Format.printf "@\n";
-         0))
+  let solve_part2 =
+    solve compute2 (fun () ->
+        Format.printf "@\n";
+        0)
+end
+
+let () = Solution.register_mod (module Sol)

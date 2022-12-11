@@ -16,3 +16,6 @@ let rec fold_chars f acc =
   match input_char stdin with
   | c -> fold_chars f (f acc c)
   | exception End_of_file -> acc
+
+
+let clear_screen = "\x1b[1;1H\x1b[2J"

@@ -118,7 +118,7 @@ let solve compute () =
   let t = match t with Dir ("#", [ e ]) -> e | _ -> assert false in
   Format.printf "%d@\n" (compute t)
 
-let name = "07a"
+let name = "07_part1"
 let () = Solution.register name (solve (sum_size 100000))
 
 let find_dir total needed t =
@@ -133,5 +133,5 @@ let find_dir total needed t =
       List.find (fun s -> s + available >= needed) l
   | _ -> assert false
 
-let name = "07b"
+let name = "07_part2"
 let () = Solution.register name (solve (find_dir 70000000 30000000))

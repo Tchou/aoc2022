@@ -39,7 +39,7 @@ let solve () =
   in
   Printf.printf "%d\n" res
 
-let name = "03a"
+let name = "03_part1"
 let () = Solution.register name solve
 
 let print_array fmt a =
@@ -75,5 +75,5 @@ let solve () =
   in
   Printf.printf "%d\n" (loop 0)
 
-let name = "03b"
+let name = "03_part2"
 let () = Solution.register name solve

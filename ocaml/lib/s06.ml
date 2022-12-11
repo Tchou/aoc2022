@@ -6,29 +6,43 @@ module CBuff = struct
   let length b = b.length
   let capacity b = Bytes.length b.data
 
-  let add_back b c =
-    let cap = capacity b in
-    assert (length b < cap);
-    let idx = (b.first + b.length) mod cap in
-    Bytes.set b.data idx c;
-    b.length <- b.length + 1
+  let pp fmt b =
+    Format.fprintf fmt "{(%d) first = %d; length = %d; data = \""
+      (Bytes.length b.data) b.first b.length;
+    for i = 0 to b.length - 1 do
+      let c = Bytes.get b.data ((b.first + i) mod capacity b) in
+      let c = if c < 'A' then '?' else c in
+      Format.fprintf fmt "%c" c
+    done;
+    for _ = b.length to capacity b - 1 do
+      Format.fprintf fmt "_"
+    done;
+    Format.fprintf fmt "\" }"
 
   let take_front b =
     assert (length b > 0);
     let c = Bytes.get b.data b.first in
     b.first <- (b.first + 1) mod capacity b;
+    b.length <- b.length - 1;
     c
+
+  let add_back b c =
+    let cap = capacity b in
+    if length b == cap then ignore (take_front b);
+    let idx = (b.first + b.length) mod cap in
+    Bytes.set b.data idx c;
+    b.length <- b.length + 1
 
   (** When inserting a character c, if there already is an occurrence of c in the buffer,
       drop all trailing characters as well as the first occurrence, since we know
-      then next potential sequence can only start after the dropped ocurrence of c. *)
+      the next potential sequence can only start after the dropped ocurrence of c. *)
   let insert_unique b c =
     let cap = capacity b in
     let rec loop len i =
       if i < len then begin
         let d = Bytes.get b.data ((b.first + i) mod cap) in
         if d = c then begin
-          b.first <- b.first + i + 1;
+          b.first <- (b.first + i + 1) mod cap;
           b.length <- b.length - i - 1
         end
         else loop len (i + 1)
@@ -40,20 +54,17 @@ end
 
 let solve n () =
   let q = CBuff.create n in
-  let res =
-    Utils.fold_chars
-      (fun i c ->
+  let rec loop i =
+    match input_char stdin with
+    | c ->
         CBuff.insert_unique q c;
         let len = CBuff.length q in
-        if len = n then i
-        else
-          let () = if len > n then ignore (CBuff.take_front q) in
-          i + 1)
-      1
+        if len = n then i else loop (i + 1)
+    | exception End_of_file -> i
   in
-  Printf.printf "%d\n" res
+  Printf.printf "%d\n" (loop 1)
 
-let name = "06a"
+let name = "06_part1"
 let () = Solution.register name (solve 4)
-let name = "06b"
+let name = "06_part2"
 let () = Solution.register name (solve 14)

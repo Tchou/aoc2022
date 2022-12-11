@@ -160,7 +160,7 @@ let solve reducer rounds () =
   let mb = monkey_business monkeys in
   Format.printf "%d\n" mb
 
-let name = "11a"
+let name = "11_part1"
 let () = Solution.register name (solve 3 20)
-let name = "11b"
+let name = "11_part2"
 let () = Solution.register name (solve 1 10000)

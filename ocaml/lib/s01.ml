@@ -19,7 +19,7 @@ let solve len () =
   let sum = Array.fold_left ( + ) 0 arr_max in
   Printf.printf "%d\n" sum
 
-let name = "01a"
+let name = "01_part1"
 let () = Solution.register name (solve 1)
-let name = "01b"
+let name = "01_part2"
 let () = Solution.register name (solve 3)

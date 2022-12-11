@@ -56,7 +56,7 @@ let solve f () =
   let res = Array.of_list (List.rev res) in
   Printf.printf "%d\n" (f res)
 
-let name = "08a"
+let name = "08_part1"
 let () = Solution.register name (solve all_count)
 
 let dist_to_passed_elems passed_elems v =
@@ -113,5 +113,5 @@ let all_scenic_scores tab =
         max_found a)
     0 tab_res
 
-let name = "08b"
+let name = "08_part2"
 let () = Solution.register name (solve all_scenic_scores)

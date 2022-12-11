@@ -100,9 +100,9 @@ let solve n () =
   let r = Hashtbl.length config.grid in
   Printf.printf "%d\n" r
 
-let name = "09a"
+let name = "09_part1"
 let () = Solution.register name (solve 2)
-let name = "09b"
+let name = "09_part2"
 let () = Solution.register name (solve 10)
 
 
@@ -129,7 +129,8 @@ let animate n () =
   let _ =
     List.fold_left
       (fun config (d, n) ->
-        Format.printf "\x1b[1;1H\x1b[2J%a@\n%!"
+        Format.printf "%s%!" Utils.clear_screen;
+        Format.printf "%a@\n%!"
           (pp_config num_row num_col)
           config;
         move_n "" config d n;
@@ -139,5 +140,5 @@ let animate n () =
   in
   Format.printf "%d@\n" (Hashtbl.length config.grid)
 
-let name = "09c"
+let name = "09_part2_animate"
 let () = Solution.register name (animate 10)

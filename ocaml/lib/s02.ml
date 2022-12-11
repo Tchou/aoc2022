@@ -30,7 +30,7 @@ let solve decide () =
   in
   Printf.printf "%d\n" total
 
-let name = "02a"
+let name = "02_part1"
 let () = Solution.register name (solve decide1)
 
 type result = Draw | Win | Loose
@@ -61,5 +61,5 @@ let decide2 old_score op_move my_move_s =
   let points = if c = 0 then 3 else if c < 0 then 6 else 0 in
   old_score + points + score my_move
 
-let name = "02b"
+let name = "02_part2"
 let () = Solution.register name (solve decide2)

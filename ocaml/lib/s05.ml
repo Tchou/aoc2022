@@ -66,19 +66,23 @@ let print_array fmt a =
   done;
   Format.fprintf fmt "\n"
 
-let solve do_n_move () =
+let debug a s =
+  Format.eprintf "%s%!" Utils.clear_screen;
+  Format.eprintf "%s@\n" s;
+  Format.eprintf "%a@\n" print_array a;
+  Unix.sleepf 0.5
+
+let solve do_n_move ?(animate = false) () =
   let a = load_level () in
-  Format.eprintf "INITIAL ARRAY:@\n%a@\n--@\n%!" print_array a;
+  let () = if animate then debug a "" in
   Utils.fold_fields ' '
     (fun () -> function
       | [ "move"; sn; "from"; si; "to"; sj ] as order ->
           let n = int_of_string sn in
           let i = int_of_string si in
           let j = int_of_string sj in
-          Format.eprintf "ARRAY:@\n%a@\nORDER:%s@\n" print_array a
-            (String.concat " " order);
           do_n_move a i j n;
-          Format.eprintf "ARRAY:@\n%a@\n--\n%!" print_array a
+          if animate then debug a (String.concat " " order)
       | _ -> ())
     ();
   let af = Array.map (function c :: _ -> String.make 1 c | _ -> "") a in
@@ -86,8 +90,10 @@ let solve do_n_move () =
   let res = String.concat "" lf in
   Format.printf "%s\n%!" res
 
-let name = "05a"
+let name = "05_part1"
 let () = Solution.register name (solve move_9000)
+let name = "05_part1_animate"
+let () = Solution.register name (solve ~animate:true move_9000)
 
 let split_n l n =
   let rec loop n l acc =
@@ -105,5 +111,7 @@ let move_9001 a i j n =
   a.(i) <- staying;
   a.(j) <- dest
 
-let name = "05b"
+let name = "05_part2"
 let () = Solution.register name (solve move_9001)
+let name = "05_part2_animate"
+let () = Solution.register name (solve ~animate:true move_9001)

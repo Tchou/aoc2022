@@ -18,12 +18,12 @@ let solve test_interval () =
   in
   Printf.printf "%d\n" res
 
-let name = "04a"
+let name = "04_part1"
 let () = Solution.register name (solve overlap)
 
 let intersect (a, b) (c, d) =
   let _, b, c, _ = if a < c then (a, b, c, d) else (c, d, a, b) in
   b >= c
 
-let name = "04b"
+let name = "04_part2"
 let () = Solution.register name (solve intersect)

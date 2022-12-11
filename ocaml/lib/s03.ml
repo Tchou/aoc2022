@@ -61,16 +61,13 @@ let solve () =
         let map2 = mark_present l2 in
         let map3 = mark_present l3 in
         match
-          try
-            for i = 0 to 255 do
-              if map1.(i) > 0 && map2.(i) > 0 && map3.(i) > 0 then
-                raise (Found (Char.chr i))
-            done;
-            None
-          with Found c -> Some c
+          for i = 0 to 255 do
+            if map1.(i) > 0 && map2.(i) > 0 && map3.(i) > 0 then
+              raise_notrace (Found (Char.chr i))
+          done
         with
-        | None -> assert false
-        | Some c -> loop (total + priority c))
+        | () -> assert false
+        | exception Found c -> loop (total + priority c))
     | exception End_of_file -> total
   in
   Printf.printf "%d\n" (loop 0)

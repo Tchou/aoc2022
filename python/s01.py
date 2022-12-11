@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 from sys import stdin
-import solution
 
 def top_k(tab, v):
     """if v is larger than the smallest value of tab,
@@ -34,5 +33,8 @@ def solve(n):
         total += v
     print(total)
 
-solution.register("01_part1", lambda: solve(1))
-solution.register("01_part2", lambda: solve(3))
+def solve_part1():
+    solve(1)
+
+def solve_part2():
+    solve(3)

@@ -24,7 +24,7 @@ def score(op, my):
     return my + 1 + res
 
 
-def solve_part1 ():
+def solve_part1():
     total = 0
     for line in stdin:
         fields = line.strip().split(" ")
@@ -54,7 +54,3 @@ def solve_part2 ():
         my_move = move_for_result(op_move,fields[1])
         total += score(op_move, my_move)
     print(total)
-
-
-solution.register("02_part1", solve_part1)
-solution.register("02_part2", solve_part2)

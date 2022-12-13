@@ -14,7 +14,7 @@ if __name__ == "__main__":
 
             exit(0)
 
-        f = solution.get(argv)
+        f = solution.get(arg)
         if f is None:
             print("Error: unknown solution", arg)
             exit(1)

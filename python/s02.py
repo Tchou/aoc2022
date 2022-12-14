@@ -1,5 +1,4 @@
 from sys import stdin
-import solution
 
 ## DEFINE 0 based constants instead of 1 based
 ## to have a simple modulo
@@ -13,44 +12,22 @@ def move(s):
     else:
         return ord(s) - ord ('X')
 
-
 def score(op, my):
-    res = 0
-    if op == my:
-        res = 3
-    elif (op + 1) % 3 == my:
-        #Victory
-        res = 6
-    return my + 1 + res
+    return ((4 - (op - my)) % 3)*3 + my + 1
 
-
-def solve_part1():
+def solve (offset, op):
     total = 0
     for line in stdin:
         fields = line.strip().split(" ")
         op_move = move(fields[0])
         my_move = move(fields[1])
-        total += score(op_move, my_move)
+        total += score(op_move, (my_move + offset + op*op_move) %3)
     print(total)
 
+def solve_part1():
+    solve(0,0)
 
-def move_for_result(op, res):
-    if res == 'X':
-        ## need to loose
-        my = (op + 2) % 3
-    elif res == 'Y':
-        ## need to draw
-        my = op
-    else:
-        ## need to win
-        my = (op + 1) % 3
-    return my
+def solve_part2():
+    solve(2,1)
 
-def solve_part2 ():
-    total = 0
-    for line in stdin:
-        fields = line.strip().split(" ")
-        op_move = move(fields[0])
-        my_move = move_for_result(op_move,fields[1])
-        total += score(op_move, my_move)
-    print(total)
+  

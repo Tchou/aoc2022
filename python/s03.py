@@ -40,6 +40,14 @@ def find_common_badge(tab):
     for c in prev_dict.keys():
         return priority(c)
 
+
+def solve_part1_alt ():
+    total = 0
+    for line in stdin:
+        s = line.strip()
+        total += find_common_badge([s[0:len(s)//2], s[len(s)//2:len(s)]])
+
+    print(total)
 def solve_part2 ():
     total = 0
     while True:

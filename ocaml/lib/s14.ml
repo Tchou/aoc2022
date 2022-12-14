@@ -68,7 +68,7 @@ module Grid = struct
     List.iter
       (fun d ->
         let q = d ++ p in
-        if can_remove q then Hashtbl.remove g.overflow q)
+        if not (inside g q) && can_remove q then Hashtbl.remove g.overflow q)
       moves
 
   let move_down ?(fall = false) g p =

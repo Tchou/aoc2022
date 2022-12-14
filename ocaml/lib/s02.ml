@@ -10,31 +10,21 @@ let of_letter = function
   | "C" | "Z" -> _SCISSORS
   | s -> failwith ("Invalid move: '" ^ s ^ "'")
 
-let score_move op my =
-  1 + my + if next op = my then 6 else if op = my then 3 else 0
-
-let decide1 old_score op_move my_move_s =
-  let my_move = of_letter my_move_s in
-  old_score + score_move op_move my_move
+let score_move op my = ((4 - (op - my)) mod 3 * 3) + 1 + my
+let decide1 old_score op_move my_move = old_score + score_move op_move my_move
 
 let solve decide =
   let total =
     Utils.fold_fields ' '
       (fun total -> function
-        | [ op; my ] -> decide total (of_letter op) my
+        | [ op; my ] -> decide total (of_letter op) (of_letter my)
         | _ -> total)
       0
   in
   Printf.printf "%d\n" total
 
-let decide2 old_score op_move my_move_s =
-  let my_move =
-    match my_move_s with
-    | "X" -> prev op_move
-    | "Y" -> op_move
-    | "Z" -> next op_move
-    | s -> failwith ("Invalid result: '" ^ s ^ "'")
-  in
+let decide2 old_score op_move result =
+  let my_move = (op_move + result + 2) mod 3 in
   old_score + score_move op_move my_move
 
 module Sol = struct

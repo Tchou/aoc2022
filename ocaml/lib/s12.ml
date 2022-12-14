@@ -1,3 +1,5 @@
+open Utils.Syntax.Hashtbl
+
 module Graph : sig
   type v
   type t
@@ -66,30 +68,28 @@ module Pqueue = struct
 
   let remove_min t =
     let ((_, v) as res), nqueue = Set.remove_min t.by_prio in
-    Hashtbl.remove t.by_vertex v;
+    t.by_vertex.%*[v] <- Delete;
     t.by_prio <- nqueue;
     res
 
-  let create () = { by_prio = Set.empty; by_vertex = Hashtbl.create 16 }
+  let create () = { by_prio = Set.empty; by_vertex = ~%[] }
   let is_empty t = Set.is_empty t.by_prio
 
   let add t ((prio, v) as e) =
     try
-      let old_prio = Hashtbl.find t.by_vertex v in
+      let old_prio = t.by_vertex.%[v] in
       if old_prio > prio then begin
         t.by_prio <- Set.add e (Set.remove (old_prio, v) t.by_prio);
-        Hashtbl.replace t.by_vertex v prio
+        t.by_vertex.%[v] <- prio
       end
     with Not_found ->
       t.by_prio <- Set.add e t.by_prio;
-      Hashtbl.replace t.by_vertex v prio
+      t.by_vertex.%[v] <- prio
 end
 
 let path_length t last =
   let rec loop acc v =
-    match Hashtbl.find t v with
-    | v2 -> loop (1 + acc) v2
-    | exception Not_found -> acc
+    match t.%[v] with v2 -> loop (1 + acc) v2 | exception Not_found -> acc
   in
   loop 0 last
 
@@ -99,21 +99,21 @@ let add_dist d1 d2 =
 
 let dijkstra g start finish_map =
   let todo = ref (Hashtbl.length finish_map) in
-  let prev = Hashtbl.create 16 in
-  let dist = Hashtbl.create 16 in
-  let get_dist v = try Hashtbl.find dist v with Not_found -> max_int in
+  let prev = ~%[] in
+  let dist = ~%[] in
+  let get_dist v = try dist.%[v] with Not_found -> max_int in
   let queue = Pqueue.create () in
   let () =
     Graph.iter_vertices g (fun v -> Pqueue.add queue (max_int, v));
     Pqueue.add queue (0, start);
-    Hashtbl.replace dist start 0
+    dist.%[start] <- 0
   in
   match
     while not (Pqueue.is_empty queue) do
       let _, u = Pqueue.remove_min queue in
-      if Hashtbl.mem finish_map u && Hashtbl.mem prev u then begin
+      if finish_map.%?[u] && prev.%?[u] then begin
         let l = path_length prev u in
-        Hashtbl.replace finish_map u l;
+        finish_map.%[u] <- l;
         decr todo;
         if !todo = 0 then raise Exit
       end;
@@ -121,8 +121,8 @@ let dijkstra g start finish_map =
           let v_dist = get_dist v in
           let alt = add_dist (get_dist u) 1 in
           if alt < v_dist then begin
-            Hashtbl.replace prev v u;
-            Hashtbl.replace dist v alt;
+            prev.%[v] <- u;
+            dist.%[v] <- alt;
             Pqueue.add queue (alt, v)
           end)
     done
@@ -131,8 +131,7 @@ let dijkstra g start finish_map =
 
 let find_all g finish targets =
   let t0 = Unix.gettimeofday () in
-  let finish_map = Hashtbl.create 16 in
-  List.iter (fun t -> Hashtbl.replace finish_map t max_int) targets;
+  let finish_map = ~%(List.map (fun t -> t, max_int) targets) in
   let _ = dijkstra g finish finish_map in
   let s = Hashtbl.fold (fun _ s acc -> min acc s) finish_map max_int in
   let t1 = Unix.gettimeofday () in

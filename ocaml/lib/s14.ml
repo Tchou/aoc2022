@@ -1,3 +1,5 @@
+open Utils.Syntax.Hashtbl
+
 module Grid = struct
   type t = { grid : bytes array; overflow : (int * int, char) Hashtbl.t }
 
@@ -9,10 +11,7 @@ module Grid = struct
 
   let create r c =
     assert (r > 0 && c > 0);
-    {
-      grid = Array.init r (fun _ -> Bytes.make c _AIR);
-      overflow = Hashtbl.create 16;
-    }
+    { grid = Array.init r (fun _ -> Bytes.make c _AIR); overflow = ~%[] }
 
   let inside g (r, c) =
     r >= 0 && r < Array.length g.grid && c >= 0 && c < Bytes.length g.grid.(0)
@@ -24,7 +23,7 @@ module Grid = struct
     assert (r1 == r2 || c1 == c2);
     let (r1, c1), (r2, c2) = min p1 p2, max p1 p2 in
     let r0, c0 = r2 - r1, c2 - c1 in
-    let r0 = if r0 == 0 then r0 else r0 / abs r0 in
+    let r0 = if r0 == 0 then 0 else r0 / abs r0 in
     let c0 = if c0 == 0 then 0 else c0 / abs c0 in
     let rec loop (r, c) =
       if (r, c) <> (r2, c2) then begin
@@ -37,14 +36,13 @@ module Grid = struct
 
   let set g ((r, c) as p) v =
     assert (is_valid g p);
-    if inside g p then Bytes.set g.grid.(r) c v
-    else Hashtbl.replace g.overflow (r, c) v
+    if inside g p then Bytes.set g.grid.(r) c v else g.overflow.%[r, c] <- v
 
   let get g ((r, c) as p) =
     assert (is_valid g p);
     if inside g p then Bytes.get g.grid.(r) c
     else if r = 1 + Array.length g.grid then _ROCK
-    else try Hashtbl.find g.overflow p with Not_found -> _AIR
+    else try g.overflow.%[p] with Not_found -> _AIR
 
   let build max_r max_col lines =
     let g = create (max_r + 1) (max_col + 1) in
@@ -68,7 +66,7 @@ module Grid = struct
     List.iter
       (fun d ->
         let q = d ++ p in
-        if not (inside g q) && can_remove q then Hashtbl.remove g.overflow q)
+        if (not (inside g q)) && can_remove q then g.overflow.%*[q] <- Delete)
       moves
 
   let move_down ?(fall = false) g p =

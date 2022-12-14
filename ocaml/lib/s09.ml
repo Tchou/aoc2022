@@ -1,3 +1,5 @@
+open Utils.Syntax.Hashtbl
+
 type config = {
   grid : (int * int, unit) Hashtbl.t;
   mutable rope : (int * int) list;
@@ -7,19 +9,17 @@ let mk_list_n n e =
   let rec loop n acc = if n = 0 then acc else loop (n - 1) (e :: acc) in
   loop n []
 
-let make_config ?(orig = (0, 0)) n =
+let make_config ?(orig = 0, 0) n =
   assert (n >= 2);
-  let init = orig in
-  let grid = Hashtbl.create 16 in
-  Hashtbl.replace grid init ();
-  { grid; rope = mk_list_n n init }
+  let grid = ~%[ orig, () ] in
+  { grid; rope = mk_list_n n orig }
 
-let up = (-1, 0)
-let down = (1, 0)
-let right = (0, 1)
-let left = (0, -1)
-let ( ++ ) (a, b) (c, d) = (a + c, b + d)
-let dist (r1, c1) (r2, c2) = (abs (r1 - r2), abs (c1 - c2))
+let up = -1, 0
+let down = 1, 0
+let right = 0, 1
+let left = 0, -1
+let ( ++ ) (a, b) (c, d) = a + c, b + d
+let dist (r1, c1) (r2, c2) = abs (r1 - r2), abs (c1 - c2)
 
 let is_touching head tail =
   let d1, d2 = dist head tail in
@@ -32,9 +32,9 @@ let closer head tail =
   let rs = if rs = 0 then 0 else rs / abs rs in
   let cs = ch - ct in
   let cs = if cs = 0 then 0 else cs / abs cs in
-  (rs, cs)
+  rs, cs
 
-let touch_grid grid pos = Hashtbl.replace grid pos ()
+let touch_grid grid pos = grid.%[pos] <- ()
 
 let move head tail =
   let d1, d2 = dist head tail in
@@ -95,14 +95,14 @@ let () = Solution.register_mod (module Sol)
 let pp_config row_num col_num fmt config =
   let lm =
     List.mapi
-      (fun i pos -> (pos, if i = 0 then 'H' else Char.chr (i + Char.code '0')))
+      (fun i pos -> pos, if i = 0 then 'H' else Char.chr (i + Char.code '0'))
       config.rope
   in
   for row = 0 to row_num - 1 do
     for col = 0 to col_num - 1 do
       let c =
-        try List.assoc (row, col) lm with
-        | Not_found -> if Hashtbl.mem config.grid (row, col) then '#' else '.'
+        try List.assoc (row, col) lm
+        with Not_found -> if config.grid.%?[row, col] then '#' else '.'
       in
       Format.fprintf fmt "%c" c
     done;
@@ -124,7 +124,7 @@ let animate n () =
         let num_row = abs (max_r - min_r) in
         let num_col = abs (max_c - min_c) in
 
-        (List.rev acc, (num_row, num_col), 2 * num_row, 2 * num_col)
+        List.rev acc, (num_row, num_col), 2 * num_row, 2 * num_col
   in
   let cmd, orig, num_row, num_col = loop [] 0 0 0 0 0 0 in
   let config = make_config ~orig n in

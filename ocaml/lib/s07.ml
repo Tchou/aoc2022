@@ -1,3 +1,5 @@
+open Utils.Syntax.Hashtbl
+
 type entry = Dir of (string, entry) Hashtbl.t | File of int
 
 let rec pp_entry fmt t =
@@ -39,10 +41,8 @@ let find_dir total needed t =
       List.find (fun s -> s + available >= needed) l
   | _ -> assert false
 
-let mk_dir () = Hashtbl.create 16
-
 let solve compute () =
-  let root_dir = mk_dir () in
+  let root_dir = ~%[] in
   let root_path = [ "/", root_dir ] in
   let _path =
     Utils.fold_fields ' '
@@ -51,23 +51,20 @@ let solve compute () =
         | _, [ "$"; "cd"; "/" ] -> root_path
         | _ :: parent_path, [ "$"; "cd"; ".." ] -> parent_path
         | (_, cwd) :: _, [ "$"; "cd"; name ] -> begin
-            if not (Hashtbl.mem cwd name) then
-              Hashtbl.add cwd name (Dir (mk_dir ()));
-            match Hashtbl.find cwd name with
+            if not (Hashtbl.mem cwd name) then cwd.%[name] <- Dir ~%[];
+            match cwd.%[name] with
             | File _ -> failwith "Cannot cd into a file"
             | Dir d -> (name, d) :: path
           end
         | _, [ "$"; "ls" ] -> path
         | _, [ "dir"; _ ] -> path
         | (_, cwd) :: _, [ ssize; name ] ->
-            Hashtbl.replace cwd name (File (int_of_string ssize));
+            cwd.%[name] <- File (int_of_string ssize);
             path
         | _ -> assert false)
       root_path
   in
-  let r = mk_dir () in
-  Hashtbl.add r "/" (Dir root_dir);
-  let t = Dir r in
+  let t = Dir ~%[ "/", Dir root_dir ] in
   Format.printf "%d@\n" (compute t)
 
 module Sol = struct

@@ -1,8 +1,5 @@
 let has_char s c =
-  try
-    ignore (String.index s c);
-    true
-  with Not_found -> false
+  match String.index s c with _ -> true | exception Not_found -> false
 
 let load_level () =
   let a = ref [||] in
@@ -22,9 +19,7 @@ let load_level () =
           if c <> ' ' then !a.(i) <- c :: !a.(i)
         done;
         loop ()
-    | s ->
-        ensure s;
-        loop ()
+    | s -> ensure s; loop ()
   in
   loop ()
 
@@ -36,8 +31,6 @@ let move a i j =
   | _ -> assert false
 
 let move_9000 a i j n =
-  let i = i - 1 in
-  let j = j - 1 in
   for _ = 0 to n - 1 do
     move a i j
   done
@@ -75,36 +68,31 @@ let debug a s =
 let solve ?(animate = false) do_n_move () =
   let a = load_level () in
   let () = if animate then debug a "" in
-  Utils.fold_fields ' '
-    (fun () -> function
-      | [ "move"; sn; "from"; si; "to"; sj ] as order ->
-          let n = int_of_string sn in
-          let i = int_of_string si in
-          let j = int_of_string sj in
-          do_n_move a i j n;
-          if animate then debug a (String.concat " " order)
-      | _ -> ())
-    ();
-  let af = Array.map (function c :: _ -> String.make 1 c | _ -> "") a in
-  let lf = Array.to_list af in
-  let res = String.concat "" lf in
-  Format.printf "%s\n%!" res
+  a
+  |> Utils.fold_fields ' ' (fun a -> function
+       | [ "move"; sn; "from"; si; "to"; sj ] as order ->
+           let n = int_of_string sn in
+           let i = int_of_string si in
+           let j = int_of_string sj in
+           do_n_move a (i - 1) (j - 1) n;
+           if animate then debug a (String.concat " " order);
+           a
+       | _ -> a)
+  |> Array.map (function c :: _ -> String.make 1 c | _ -> "")
+  |> Array.to_list |> String.concat "" |> Format.printf "%s\n%!"
 
 let split_n l n =
   let rec loop n l acc =
-    if n = 0 then (acc, l)
+    if n = 0 then acc, l
     else
       match l with p :: ll -> loop (n - 1) ll (p :: acc) | _ -> assert false
   in
   loop n l []
 
 let move_9001 a i j n =
-  let i = i - 1 in
-  let j = j - 1 in
   let to_move, staying = split_n a.(i) n in
   let dest = List.rev_append to_move a.(j) in
-  a.(i) <- staying;
-  a.(j) <- dest
+  a.(i) <- staying; a.(j) <- dest
 
 module Sol = struct
   let name = "05"

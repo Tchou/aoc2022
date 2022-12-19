@@ -1,11 +1,9 @@
 open Utils.Syntax.Hashtbl
+open Utils
 
 module Graph : sig
-  type v
-  type t
+  include GRAPH
 
-  val iter_vertices : t -> (v -> unit) -> unit
-  val iter_pred : t -> v -> (v -> unit) -> unit
   val load_level : unit -> v list * v * v * t
 end = struct
   type v = int * int
@@ -22,12 +20,13 @@ end = struct
     r >= 0 && r < Array.length g && c >= 0 && c < Array.length g.(0)
 
   let moves = [| -1, 0; 1, 0; 0, -1; 0, 1 |]
+  let fold_succ _ _ _ _ = assert false
 
-  let iter_pred g (r, c) f =
+  let iter_succ g (r, c) f =
     for k = 0 to 3 do
       let i, j = moves.(k) in
       let ((rs, cs) as s) = i + r, j + c in
-      if in_range g s && g.(r).(c) <= 1 + g.(rs).(cs) then f s
+      if in_range g s && g.(r).(c) <= 1 + g.(rs).(cs) then f (s, 1)
     done
 
   let load_level () =
@@ -51,88 +50,12 @@ end = struct
     !lowest_points, !start, !finish, gl |> List.rev |> Array.of_list
 end
 
-module Pqueue = struct
-  module Set = struct
-    include Set.Make (struct
-      type t = int * Graph.v
-
-      let compare = compare
-    end)
-
-    let remove_min s =
-      let m = min_elt s in
-      m, remove m s
-  end
-
-  type t = { mutable by_prio : Set.t; by_vertex : (Graph.v, int) Hashtbl.t }
-
-  let remove_min t =
-    let ((_, v) as res), nqueue = Set.remove_min t.by_prio in
-    t.by_vertex.%*[v] <- Delete;
-    t.by_prio <- nqueue;
-    res
-
-  let create () = { by_prio = Set.empty; by_vertex = ~%[] }
-  let is_empty t = Set.is_empty t.by_prio
-
-  let add t ((prio, v) as e) =
-    try
-      let old_prio = t.by_vertex.%[v] in
-      if old_prio > prio then begin
-        t.by_prio <- Set.add e (Set.remove (old_prio, v) t.by_prio);
-        t.by_vertex.%[v] <- prio
-      end
-    with Not_found ->
-      t.by_prio <- Set.add e t.by_prio;
-      t.by_vertex.%[v] <- prio
-end
-
-let path_length t last =
-  let rec loop acc v =
-    match t.%[v] with v2 -> loop (1 + acc) v2 | exception Not_found -> acc
-  in
-  loop 0 last
-
-let add_dist d1 d2 =
-  let d = d1 + d2 in
-  if d < 0 then max_int else d
-
-let dijkstra g start finish_map =
-  let todo = ref (Hashtbl.length finish_map) in
-  let prev = ~%[] in
-  let dist = ~%[] in
-  let get_dist v = try dist.%[v] with Not_found -> max_int in
-  let queue = Pqueue.create () in
-  let () =
-    Graph.iter_vertices g (fun v -> Pqueue.add queue (max_int, v));
-    Pqueue.add queue (0, start);
-    dist.%[start] <- 0
-  in
-  match
-    while not (Pqueue.is_empty queue) do
-      let _, u = Pqueue.remove_min queue in
-      if finish_map.%?[u] && prev.%?[u] then begin
-        let l = path_length prev u in
-        finish_map.%[u] <- l;
-        decr todo;
-        if !todo = 0 then raise Exit
-      end;
-      Graph.iter_pred g u (fun v ->
-          let v_dist = get_dist v in
-          let alt = add_dist (get_dist u) 1 in
-          if alt < v_dist then begin
-            prev.%[v] <- u;
-            dist.%[v] <- alt;
-            Pqueue.add queue (alt, v)
-          end)
-    done
-  with
-  | () | (exception Exit) -> finish_map
+module Algo = GraphAlgo (Graph)
 
 let find_all g finish targets =
   let t0 = Unix.gettimeofday () in
   let finish_map = ~%(List.map (fun t -> t, max_int) targets) in
-  let _ = dijkstra g finish finish_map in
+  let () = Algo.dijkstra g finish finish_map in
   let s = Hashtbl.fold (fun _ s acc -> min acc s) finish_map max_int in
   let t1 = Unix.gettimeofday () in
   Format.printf "%d (%fms)@\n" s (1000. *. (t1 -. t0))

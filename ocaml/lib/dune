@@ -1,4 +1,5 @@
 (library
  (library_flags (-linkall))
  (name aoc2022)
+ (ocamlopt_flags (-inline 10000))
  (libraries unix))

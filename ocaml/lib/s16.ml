@@ -119,10 +119,6 @@ let unpack_simple_node info = (info lsr 32) land 0xffff
 let calls = ref 0
 let hits = ref 0
 
-let () =
-  at_exit (fun () ->
-      Format.eprintf "%d/%d (%.3f %%)@\n%!" !hits !calls
-        (float !hits /. float !calls *. 100.))
 
 let all_simple_paths_opt n (g : Graph.t) dist root =
   let open Graph in

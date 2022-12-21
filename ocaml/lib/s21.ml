@@ -39,14 +39,21 @@ let op_of_string = function
   | _ -> assert false
 
 let string_of_op = function Add -> "+" | Sub -> "-" | Mul -> "*" | Div -> "/"
+let level = function Add | Sub -> 1 | Mul | Div -> 5
 
-let rec pp_expr fmt expr =
-  match expr with
-  | Frac f -> Frac.pp fmt f
-  | Var v -> Format.fprintf fmt "%s" v
-  | Binop (e1, op, e2) ->
-      Format.fprintf fmt "@[(@[%a@])%s(@[%a@])@]" pp_expr e1 (string_of_op op)
-        pp_expr e2
+let pp_expr fmt expr =
+  let rec loop lvl fmt expr =
+    match expr with
+    | Frac f -> Frac.pp fmt f
+    | Var v -> Format.fprintf fmt "%s" v
+    | Binop (e1, op, e2) ->
+        let l = level op in
+        if lvl > level op then Format.fprintf fmt "(";
+        Format.fprintf fmt "@[%a %s %a@]" (loop l) e1 (string_of_op op) (loop l)
+          e2;
+        if lvl > level op then Format.fprintf fmt ")"
+  in
+  loop 0 fmt expr
 
 let eval_op a op b =
   let open Frac in
@@ -68,16 +75,14 @@ let read_prog () =
     ~%[]
 
 let rec solve f e =
+  Format.eprintf "%a = %a@\n" Frac.pp f pp_expr e;
   let open Frac in
   match e with
   | Binop (Frac f1, Add, e2) -> solve (f -/ f1) e2
   | Binop (Frac f1, Sub, e2) -> solve (f1 -/ f) e2
   | Binop (Frac f1, Mul, e2) -> solve (f // f1) e2
   | Binop (Frac f1, Div, e2) -> solve (f1 // f) e2
-  | Binop (e1, Add, Frac f2) -> solve (f -/ f2) e1
-  | Binop (e1, Sub, Frac f2) -> solve (f +/ f2) e1
-  | Binop (e1, Mul, Frac f2) -> solve (f // f2) e1
-  | Binop (e1, Div, Frac f2) -> solve (f */ f2) e1
+  | Binop (e1, op, Frac f2) -> solve (eval_op f (inv_op op) f2) e1
   | _ -> f, e
 
 (* evaluate the definition of variable [n] in program [prog]

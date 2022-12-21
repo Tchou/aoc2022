@@ -4,7 +4,7 @@ module SSet = struct
   type t = int
 
   let empty = 0
-  let mem i s = (1 lsl i) land s <> 0
+  let mem i s = (1 lsl i) land s != 0
   let not_mem i s = (1 lsl i) land s == 0
   let add i s = (1 lsl i) lor s
 
@@ -119,7 +119,6 @@ let unpack_simple_node info = (info lsr 32) land 0xffff
 let calls = ref 0
 let hits = ref 0
 
-
 let all_simple_paths_opt n (g : Graph.t) dist root =
   let open Graph in
   let cache = ~%[] in
@@ -178,13 +177,9 @@ let all_double_paths_opt n (g : Graph.t) dist at_dist root =
   let cache = ~%[] in
   let max_found = ref 0 in
   let vset_found = ref false in
+  let all_valves_rates = Hashtbl.fold (fun _ v acc -> v + acc) g.valves 0 in
   let rec jump_equal w1 w2 d vset i vval total =
-    let vset, w1_flow_rate =
-      if g.valves.%?[w1] then
-        if SSet.not_mem w1 vset then SSet.add w1 vset, g.valves.%[w1]
-        else vset, 0
-      else vset, 0
-    in
+    let vset, w1_flow_rate = SSet.add w1 vset, g.valves.%[w1] in
     let vset, w2_flow_rate =
       if g.valves.%?[w2] then
         if SSet.not_mem w2 vset then SSet.add w2 vset, g.valves.%[w2]
@@ -227,40 +222,59 @@ let all_double_paths_opt n (g : Graph.t) dist at_dist root =
         let v1 = unpack_double_low_node info in
         let v2 = unpack_double_high_node info in
         let res =
-          fold_absent_valves g
-            (fun acc w1 ->
-              let d1 = dist.(v1).(w1) in
-              fold_absent_valves g
-                (fun acc w2 ->
-                  (* try to go to w1, w2 *)
-                  let d2 = dist.(v2).(w2) in
-                  if d1 == d2 then
-                    (* both can jump the same distance *)
-                    max acc (jump_equal w1 w2 d1 vset i vval total)
-                  else
-                    (* can't jump at the same distance, jump to the smallest
+          if total + ((n - i) * all_valves_rates) < !max_found then total
+          else
+            fold_absent_valves g
+              (fun acc w1 ->
+                let d1 = dist.(v1).(w1) in
+                fold_absent_valves g
+                  (fun acc w2 ->
+                    (* try to go to w1, w2 *)
+                    let d2 = dist.(v2).(w2) in
+                    if d1 == d2 then
+                      (* both can jump the same distance *)
+                      max acc (jump_equal w1 w2 d1 vset i vval total)
+                    else
+                      (* can't jump at the same distance, jump to the smallest
                        and let the other one catch-up*)
-                    let d1, d2, w1, w2, v1, v2 =
-                      if d1 > d2 then d2, d1, w2, w1, v2, v1
-                      else d1, d2, w1, w2, v1, v2
-                    in
-                    (* w1 is the closest one *)
-                    (* find a node at distance d1 from v2 *)
-                    match at_dist.%[v2, w2].(d1) with
-                    | None ->
-                        ignore d2;
-                        ignore v1;
-                        (* no such node, stay here for w2*) assert false
-                    | Some nw2 ->
-                        (*found one, jump to new2 instead and restart from there*)
-                        max acc (jump_equal w1 nw2 d1 vset i vval total))
-                acc vset)
-            total vset
+                      let d1, d2, w1, w2, v1, v2 =
+                        if d1 > d2 then d2, d1, w2, w1, v2, v1
+                        else d1, d2, w1, w2, v1, v2
+                      in
+                      (* w1 is the closest one *)
+                      (* find a node at distance d1 from v2 *)
+                      match at_dist.%[v2, w2].(d1) with
+                      | None ->
+                          ignore d2;
+                          ignore v1;
+                          (* no such node, stay here for w2*) assert false
+                      | Some nw2 ->
+                          (*found one, jump to new2 instead and restart from there*)
+                          max acc (jump_equal w1 nw2 d1 vset i vval total))
+                  acc vset)
+              total vset
         in
         cache.%[info] <- res - total;
         res
   in
   loop 1 (pack_simple_info 1 root SSet.empty) 0 0
+
+(*
+     d1     U1   e1  V1    f1    W1
+------------|--------|-----------|-----------------------------------------
+
+                 d2                    U2   e2      V2   f2   W2
+---------------------------------------|-------------|---------|------------
+ 
+
+(U1, U2)
+(d2 - d1 + 1) U1 + U2, d1_diff = d2 - d1
+
+(V1, V2)
+vval * e2 + 
+
+
+*)
 
 (* iterate in parallel *)
 let all_double_paths_opt2 n (g : Graph.t) dist _at_dist root =
@@ -300,12 +314,13 @@ let all_double_paths_opt2 n (g : Graph.t) dist _at_dist root =
           fold_absent_valves g
             (fun acc w1 ->
               let d1 = dist.(v1).(w1) - d1_diff in
+              let vset = SSet.add w1 vset in
               fold_absent_valves g
                 (fun acc w2 ->
-                  let vset = SSet.add w1 vset in
                   (* try to go to w1, w2 *)
                   let d2 = dist.(v2).(w2) in
                   let vset = SSet.add w2 vset in
+
                   let w1, w2, d1, d2, _v1, _v2 =
                     if d1 > d2 then w2, w1, d2, d1, v2, v1
                     else w1, w2, d1, d2, v1, v2
@@ -325,13 +340,10 @@ let all_double_paths_opt2 n (g : Graph.t) dist _at_dist root =
                       vval * d2 + w2_flow_rate + (d2 - d1) * w1_flow_rate
                     *)
                   let total =
-                    total + (vval * d2)
-                    + target_flow2
+                    total + (vval * d2) + target_flow2
                     + ((d2 - d1 + 1) * target_flow1)
                   in
-                  let vval =
-                    vval + w1_flow_rate + w2_flow_rate
-                  in
+                  let vval = vval + w1_flow_rate + w2_flow_rate in
                   let ni = d2 + i in
                   let ninfo = ni, w1, d2 - d1, w2, vset in
                   max acc (loop ni ninfo vval total))
@@ -421,9 +433,7 @@ module Sol = struct
     in
     let at_dist = Algo.reverse_floyd_warshall g dist in
     let t0 = Unix.gettimeofday () in
-    let n =
-      all_double_paths_opt2 26 g dist_array at_dist g.name_to_id.%["AA"]
-    in
+    let n = all_double_paths_opt2 26 g dist_array at_dist g.name_to_id.%["AA"] in
     let t1 = Unix.gettimeofday () in
     Format.printf "%d (in %.4fms)@\n" n (1000. *. (t1 -. t0))
 end

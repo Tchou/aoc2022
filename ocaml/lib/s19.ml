@@ -1,9 +1,23 @@
 open Utils.Syntax.Hashtbl
 
+module Resource = struct
+  type t = int * int * int (*ore * clay * obsidian *)
+
+  let ( +: ) (a, b, c) (d, e, f) = a + d, b + e, c + f
+  let ( -: ) (a, b, c) (d, e, f) = a - d, b - e, c - f
+  let ( *: ) d (a, b, c) = a * d, b * d, c * d
+  let zero = 0, 0, 0
+  let ore = 1, 0, 0
+  let clay = 0, 1, 0
+  let obsidian = 0, 0, 1
+  let get_ore (a, _, _) = a
+  let get_clay (_, b, _) = b
+  let get_obs (_, _, c) = c
+  let pp fmt (a, b, c) = Format.fprintf fmt "ore:%d, clay: %d, obs:%d" a b c
+end
+
 type config = {
-  ore : int;
-  clay : int;
-  obsidian : int;
+  resource : Resource.t;
   ore_robot : int;
   clay_robot : int;
   obsidian_robot : int;
@@ -12,9 +26,7 @@ type config = {
 
 let default_config =
   {
-    ore = 0;
-    clay = 0;
-    obsidian = 0;
+    resource = Resource.zero;
     ore_robot = 1;
     clay_robot = 0;
     obsidian_robot = 0;
@@ -22,16 +34,15 @@ let default_config =
   }
 
 type blueprint = {
-  ore_robot_cost : int;
-  clay_robot_cost : int;
-  obsidian_robot_cost : int * int;
-  geode_robot_cost : int * int;
+  ore_robot_cost : Resource.t;
+  clay_robot_cost : Resource.t;
+  obsidian_robot_cost : Resource.t;
+  geode_robot_cost : Resource.t;
 }
 
 let pp_config fmt c =
-  Format.fprintf fmt
-    "{ore:%d, clay:%d, obsi:%d, ore_r: %d, cl_r: %d, ob_r:%d, ge_r: %d}" c.ore
-    c.clay c.obsidian c.ore_robot c.clay_robot c.obsidian_robot c.geode_robot
+  Format.fprintf fmt "{%a, ore_r: %d, cl_r: %d, ob_r:%d, ge_r: %d}" Resource.pp
+    c.resource c.clay_robot c.obsidian_robot c.geode_robot
 
 (* For each robot 3 functions :
     - do we need the robot : we need robots until we have enough robots to
@@ -42,48 +53,37 @@ let pp_config fmt c =
 (* ore robots *)
 let need_ore_robot bp c =
   c.ore_robot
-  < max bp.ore_robot_cost
-      (max bp.clay_robot_cost
-         (max (fst bp.obsidian_robot_cost) (fst bp.geode_robot_cost)))
+  < Resource.get_ore
+      (max bp.ore_robot_cost
+         (max bp.clay_robot_cost
+            (max bp.obsidian_robot_cost bp.geode_robot_cost)))
 
-let pay_ore_robot { ore_robot_cost; _ } c =
-  if c.ore >= ore_robot_cost then Some { c with ore = c.ore - ore_robot_cost }
+let pay_robot cost c =
+  if c.resource >= cost then
+    Some { c with resource = Resource.(c.resource -: cost) }
   else None
 
 let incr_ore_robot c = { c with ore_robot = c.ore_robot + 1 }
 
 (* clay robots *)
-let need_clay_robot bp c = c.clay_robot < snd bp.obsidian_robot_cost
-
-let pay_clay_robot { clay_robot_cost; _ } c =
-  if c.ore >= clay_robot_cost then Some { c with ore = c.ore - clay_robot_cost }
-  else None
+let need_clay_robot bp c =
+  c.clay_robot < Resource.get_clay bp.obsidian_robot_cost
 
 let incr_clay_robot c = { c with clay_robot = c.clay_robot + 1 }
 
 (* obsidian robot *)
-let need_obsidian_robot bp c = c.obsidian_robot < snd bp.geode_robot_cost
-
-let pay_obsidian_robot { obsidian_robot_cost = o, cl; _ } c =
-  if c.ore >= o && c.clay >= cl then
-    Some { c with ore = c.ore - o; clay = c.clay - cl }
-  else None
+let need_obsidian_robot bp c =
+  c.obsidian_robot < Resource.get_obs bp.geode_robot_cost
 
 let incr_obsidian_robot c = { c with obsidian_robot = c.obsidian_robot + 1 }
 
 (* geode robot *)
 let need_geode_robot _ _ = true (* we need them !*)
-
-let pay_geode_robot { geode_robot_cost = ore, ob; _ } c =
-  if c.ore >= ore && c.obsidian >= ob then
-    Some { c with ore = c.ore - ore; obsidian = c.obsidian - ob }
-  else None
-
 let incr_geode_robot c = { c with geode_robot = c.geode_robot + 1 }
 
 (* a noop action that allows us to wait *)
 let need_nop _ _ = true
-let noop _ c = Some c
+let noop c = Some c
 let incr_noop c = c
 
 let all_robots bp c =
@@ -95,27 +95,29 @@ let max_geode_prudction c d =
   let d1 = d + 1 in
   (c.geode_robot * d1) + (d * d1 / 2)
 
-let operations =
+let operations bp =
   [|
-    need_geode_robot, pay_geode_robot, incr_geode_robot;
-    need_obsidian_robot, pay_obsidian_robot, incr_obsidian_robot;
-    need_clay_robot, pay_clay_robot, incr_clay_robot;
-    need_ore_robot, pay_ore_robot, incr_ore_robot;
+    need_geode_robot, pay_robot bp.geode_robot_cost, incr_geode_robot;
+    need_obsidian_robot, pay_robot bp.obsidian_robot_cost, incr_obsidian_robot;
+    need_clay_robot, pay_robot bp.clay_robot_cost, incr_clay_robot;
+    need_ore_robot, pay_robot bp.ore_robot_cost, incr_ore_robot;
     need_nop, noop, incr_noop;
   |]
 
 (* update the production *)
 let update c =
+  let open Resource in
   {
     c with
-    ore = c.ore + c.ore_robot;
-    clay = c.clay + c.clay_robot;
-    obsidian = c.obsidian + c.obsidian_robot;
+    resource =
+      c.resource +: (c.ore_robot *: ore) +: (c.clay_robot *: clay)
+      +: (c.obsidian_robot *: obsidian);
   }
 
 let simulate n blueprint start =
   let cache = ~%[] in
   let max_geode = ref 0 in
+  let operations = operations blueprint in
   let rec loop i config geode =
     if i > n then begin
       max_geode := max !max_geode geode;
@@ -132,7 +134,7 @@ let simulate n blueprint start =
               Array.fold_left
                 (fun acc (need, pay, incr) ->
                   if need blueprint config then
-                    match pay blueprint config with
+                    match pay config with
                     | Some nconfig ->
                         let nconfig = update nconfig in
                         (* update production *)
@@ -150,6 +152,7 @@ let simulate n blueprint start =
   loop 1 start 0
 
 let load_blueprints () =
+  let open Resource in
   Utils.fold_lines
     (fun acc s ->
       Scanf.sscanf s
@@ -158,10 +161,10 @@ let load_blueprints () =
          costs %d ore and %d obsidian." (fun i oo co obo obcl go gob ->
           ( i,
             {
-              ore_robot_cost = oo;
-              clay_robot_cost = co;
-              obsidian_robot_cost = obo, obcl;
-              geode_robot_cost = go, gob;
+              ore_robot_cost = oo *: ore;
+              clay_robot_cost = co *: ore;
+              obsidian_robot_cost = (obo *: ore) +: (obcl *: clay);
+              geode_robot_cost = (go *: ore) +: (gob *: obsidian);
             } )
           :: acc))
     []

@@ -127,11 +127,7 @@ module Sol = struct
     | Binop (Var x1, _, Var x2) ->
         let s1 = eval_for_var ~sym:"humn" prog x1 in
         let s2 = eval_for_var ~sym:"humn" prog x2 in
-        let f, _e =
-          match s1, s2 with
-          | Frac f, e | e, Frac f -> solve f e
-          | _ -> assert false
-        in
+        let f, _e = solve (Frac.int 0) (Binop (s1, Sub, s2)) in
         Format.printf "%a@\n%!" Frac.pp f
     | _ -> assert false
 end

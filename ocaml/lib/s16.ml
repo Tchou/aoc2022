@@ -1,6 +1,6 @@
 open Utils.Syntax.Hashtbl
 
-module SSet = struct
+module BitSet = struct
   type t = int
 
   let empty = 0
@@ -100,12 +100,12 @@ module Graph = struct
           (List.map (fun (w, _) -> Array.get g.id_to_name w) g.edges.(v)))
 
   let fold_absent_valves g f acc vset =
-    let rec loop len i acc =
-      if i > len then acc
-      else if SSet.not_mem i vset then loop len (i + 1) (f acc i)
-      else loop len (i + 1) acc
+    let rec loop i acc =
+      if i <= 1 then acc
+      else if BitSet.not_mem i vset then loop (i - 1) (f acc i)
+      else loop (i - 1) acc
     in
-    loop (Hashtbl.length g.valves) 1 acc
+    loop (Hashtbl.length g.valves) acc
 end
 
 module Algo = Utils.GraphAlgo (Graph)
@@ -140,7 +140,7 @@ let all_simple_paths_opt n (g : Graph.t) dist root =
           let res =
             fold_absent_valves g
               (fun acc w ->
-                let vset = SSet.add w vset in
+                let vset = BitSet.add w vset in
                 let d = dist.(v).(w) in
                 let w_flow_rate = g.valves.%[w] in
                 let d, target_flow =
@@ -156,7 +156,7 @@ let all_simple_paths_opt n (g : Graph.t) dist root =
           cache.%[info] <- res - total;
           res
   in
-  loop 1 (pack_simple_info 1 root SSet.empty) 0 0
+  loop 1 (pack_simple_info 1 root BitSet.empty) 0 0
 
 let unpack_vset info = info land 0xffffffff
 let _unpack_i info = (info lsr 48) land 0xff
@@ -176,13 +176,14 @@ let all_double_paths_opt n (g : Graph.t) dist at_dist root =
   let open Graph in
   let cache = ~%[] in
   let max_found = ref 0 in
+  let path_found = ref [] in
   let vset_found = ref false in
   let all_valves_rates = Hashtbl.fold (fun _ v acc -> v + acc) g.valves 0 in
-  let rec jump_equal w1 w2 d vset i vval total =
-    let vset, w1_flow_rate = SSet.add w1 vset, g.valves.%[w1] in
+  let rec jump_equal w1 w2 d vset i vval total path =
+    let vset, w1_flow_rate = BitSet.add w1 vset, g.valves.%[w1] in
     let vset, w2_flow_rate =
       if g.valves.%?[w2] then
-        if SSet.not_mem w2 vset then SSet.add w2 vset, g.valves.%[w2]
+        if BitSet.not_mem w2 vset then BitSet.add w2 vset, g.valves.%[w2]
         else vset, 0
       else vset, 0
     in
@@ -197,8 +198,9 @@ let all_double_paths_opt n (g : Graph.t) dist at_dist root =
       if w1 < w2 then pack_double_info ni w1 w2 vset 0
       else pack_double_info ni w2 w1 vset 0
     in
-    loop ni ninfo vval total
-  and loop i info vval total =
+    loop ni ninfo vval total path
+  and loop i info vval total path =
+    let path = info :: path in
     (* at minute i, the low node is a valve to open,
         the high node is any other node that we iterate.
     *)
@@ -206,13 +208,15 @@ let all_double_paths_opt n (g : Graph.t) dist at_dist root =
     if i == n then begin
       if total > !max_found then begin
         max_found := total;
+        path_found := path;
         vset_found := vset = g.valve_mask;
         Format.eprintf "New max found: %d (%d/%d)@\n%!" !max_found vset
           g.valve_mask
       end;
       total
     end
-    else if vset = g.valve_mask then loop n info vval (((n - i) * vval) + total)
+    else if vset = g.valve_mask then
+      loop n info vval (((n - i) * vval) + total) path
     else
       let () = incr calls in
       try
@@ -233,7 +237,7 @@ let all_double_paths_opt n (g : Graph.t) dist at_dist root =
                     let d2 = dist.(v2).(w2) in
                     if d1 == d2 then
                       (* both can jump the same distance *)
-                      max acc (jump_equal w1 w2 d1 vset i vval total)
+                      max acc (jump_equal w1 w2 d1 vset i vval total path)
                     else
                       (* can't jump at the same distance, jump to the smallest
                        and let the other one catch-up*)
@@ -250,14 +254,15 @@ let all_double_paths_opt n (g : Graph.t) dist at_dist root =
                           (* no such node, stay here for w2*) assert false
                       | Some nw2 ->
                           (*found one, jump to new2 instead and restart from there*)
-                          max acc (jump_equal w1 nw2 d1 vset i vval total))
+                          max acc (jump_equal w1 nw2 d1 vset i vval total path))
                   acc vset)
               total vset
         in
         cache.%[info] <- res - total;
         res
   in
-  loop 1 (pack_simple_info 1 root SSet.empty) 0 0
+  let _ = loop 1 (pack_simple_info 1 root BitSet.empty) 0 0 [] in
+  !path_found, !max_found
 
 (*
      d1     U1   e1  V1    f1    W1
@@ -280,80 +285,79 @@ vval * e2 +
 let all_double_paths_opt2 n (g : Graph.t) dist _at_dist root =
   let open Graph in
   let cache = ~%[] in
+  let path_found = ref [] in
   let max_found = ref 0 in
-  let rec loop i ((_, v1, d1_diff, v2, vset) as info) vval total =
-    if false then
-      Format.eprintf
-        "%sMINUTE: % 2d, v1=%s (ov1=%s) d1=%d, v2=%s (ov2=%s), total=%d, \
-         vval=%d, vset={%s}@\n\
-         %!"
-        (String.make i ' ') i g.id_to_name.(v1) "" d1_diff g.id_to_name.(v2) ""
-        total vval
-        (String.concat ", "
-           (g.valves |> Hashtbl.to_seq
-           |> Seq.filter (fun (i, _) -> SSet.mem i vset)
-           |> List.of_seq |> List.sort compare
-           |> List.map (fun (i, c) ->
-                  Format.sprintf "%s (%d)" g.id_to_name.(i) c)));
-    if i == n then begin
-      if total > !max_found then begin
-        max_found := total;
-        Format.eprintf "New max found: %d (%d)@\n%!" !max_found
-          (Hashtbl.length cache)
-      end;
-      total
-    end
-    else if vset = g.valve_mask then loop n info vval (((n - i) * vval) + total)
+  let rec loop i ((_, v1, d1_diff, v2, vset) as info) total path =
+    let path = info :: path in
+    if i = 0 then
+      if d1_diff = 0 then begin
+        if total > !max_found then begin
+          path_found := path;
+          max_found := total;
+          Format.eprintf "New max found: %d (%d)@\n%!" !max_found
+            (Hashtbl.length cache)
+        end;
+        total
+      end
+      else begin
+        (* here v1 still can go around during d1_diff minutes *)
+        try total + cache.%[info]
+        with Not_found ->
+          let res =
+            if g.valve_mask == vset then loop 0 (0, v1, 0, v2, vset) total path
+            else
+              fold_absent_valves g
+                (fun acc w1 ->
+                  let d1 = dist.(v1).(w1) in
+                  let vset = BitSet.add w1 vset in
+                  let w1_flow_rate = g.valves.%[w1] in
+                  let d1 = min d1_diff d1 in
+                  let total = total + (w1_flow_rate * (d1_diff - d1)) in
+                  let ninfo = 0, w1, d1_diff - d1, v2, vset in
+                  max acc (loop 0 ninfo total path))
+                total vset
+          in
+          cache.%[info] <- res - total;
+          res
+      end
     else
-      let () = incr calls in
-      try
-        let res = total + cache.%[info] in
-        incr hits; res
+      try total + cache.%[info]
       with Not_found ->
         let res =
-          fold_absent_valves g
-            (fun acc w1 ->
-              let d1 = dist.(v1).(w1) - d1_diff in
-              let vset = SSet.add w1 vset in
-              fold_absent_valves g
-                (fun acc w2 ->
-                  (* try to go to w1, w2 *)
-                  let d2 = dist.(v2).(w2) in
-                  let vset = SSet.add w2 vset in
-
-                  let w1, w2, d1, d2, _v1, _v2 =
-                    if d1 > d2 then w2, w1, d2, d1, v2, v1
-                    else w1, w2, d1, d2, v1, v2
-                  in
-                  (* d1 closest, d2 furthest*)
-                  let w1_flow_rate = g.valves.%[w1] in
-                  let w2_flow_rate = if w1 == w2 then 0 else g.valves.%[w2] in
-                  let d1, target_flow1 =
-                    if d1 + i > n then n - i, 0 else d1, w1_flow_rate
-                  in
-                  let d2, target_flow2 =
-                    if d2 + i > n then n - i, 0 else d2, w2_flow_rate
-                  in
-                  (*
-                      spend d2 minutes in total :
-                      the amount will be :
-                      vval * d2 + w2_flow_rate + (d2 - d1) * w1_flow_rate
-                    *)
-                  let total =
-                    total + (vval * d2) + target_flow2
-                    + ((d2 - d1 + 1) * target_flow1)
-                  in
-                  let vval = vval + w1_flow_rate + w2_flow_rate in
-                  let ni = d2 + i in
-                  let ninfo = ni, w1, d2 - d1, w2, vset in
-                  max acc (loop ni ninfo vval total))
-                acc vset)
-            total vset
+          if g.valve_mask == vset then loop 0 (0, v1, 0, v2, vset) total path
+          else
+            fold_absent_valves g
+              (fun acc w1 ->
+                let d1 = dist.(v1).(w1) - d1_diff in
+                fold_absent_valves g
+                  (fun acc w2 ->
+                    let vset = BitSet.add w1 vset in
+                    let vset = BitSet.add w2 vset in
+                    let d2 = dist.(v2).(w2) in
+                    (* d1 closest, d2 furthest*)
+                    let w1, w2, d1, d2 =
+                      if d1 < d2 then w1, w2, d1, d2 else w2, w1, d2, d1
+                    in
+                    let w1_flow_rate = g.valves.%[w1] in
+                    let w2_flow_rate = if w1 == w2 then 0 else g.valves.%[w2] in
+                    let d1 = min d1 i in
+                    let d2 = min d2 i in
+                    let total =
+                      total
+                      + (w1_flow_rate * (i - d1))
+                      + (w2_flow_rate * (i - d2))
+                    in
+                    let ni = i - d2 in
+                    let ninfo = ni, w1, d2 - d1, w2, vset in
+                    max acc (loop ni ninfo total path))
+                  acc vset)
+              total vset
         in
         cache.%[info] <- res - total;
         res
   in
-  loop 1 (1, root, 0, root, SSet.empty) 0 0
+  let _ = loop n (n, root, 0, root, BitSet.empty) 0 [] in
+  !path_found, !max_found
 
 let load_level () =
   let rates = ref [] in
@@ -400,6 +404,54 @@ let load_level () =
   in
   g
 
+let print_info1 g info1 =
+  let open Graph in
+  let i = unpack_i info1 in
+  let v1 = unpack_double_high_node info1 in
+  let v2 = unpack_double_low_node info1 in
+  let vset = unpack_vset info1 in
+  let fv1 = try g.valves.%[v1] with Not_found -> 0 in
+  let fv2 = try g.valves.%[v2] with Not_found -> 0 in
+  let l =
+    Hashtbl.fold
+      (fun k _ acc -> if BitSet.mem k vset then k :: acc else acc)
+      g.valves []
+  in
+  let l =
+    l
+    |> List.map (fun i -> g.id_to_name.(i))
+    |> List.sort compare |> String.concat ", "
+  in
+  Format.eprintf "(1) % 2d: %s (%d) -- %s (%d) {%s}@\n" i g.id_to_name.(v1) fv1
+    g.id_to_name.(v2) fv2 l
+
+let print_info2 g (i, v1, d1_diff, v2, vset) =
+  let open Graph in
+  let fv1 = try g.valves.%[v1] with Not_found -> 0 in
+  let fv2 = try g.valves.%[v2] with Not_found -> 0 in
+  let l =
+    Hashtbl.fold
+      (fun k _ acc -> if BitSet.mem k vset then k :: acc else acc)
+      g.valves []
+  in
+  let l =
+    l
+    |> List.map (fun i -> g.id_to_name.(i))
+    |> List.sort compare |> String.concat ", "
+  in
+  Format.eprintf " (2) % 2d: %s (%d) %d -- %s (%d) {%s}@\n%!" i
+    g.id_to_name.(v1) fv1 d1_diff g.id_to_name.(v2) fv2 l
+
+let debug g p1 p2 =
+  let rec loop p1 p2 =
+    match p1, p2 with
+    | [], [] -> ()
+    | i1 :: pp1, i2 :: pp2 -> print_info1 g i1; print_info2 g i2; loop pp1 pp2
+    | i1 :: pp1, [] -> print_info1 g i1; loop pp1 []
+    | [], i2 :: pp2 -> print_info2 g i2; loop [] pp2
+  in
+  loop p1 p2
+
 module Sol = struct
   let name = "16"
 
@@ -433,9 +485,18 @@ module Sol = struct
     in
     let at_dist = Algo.reverse_floyd_warshall g dist in
     let t0 = Unix.gettimeofday () in
-    let n = all_double_paths_opt2 26 g dist_array at_dist g.name_to_id.%["AA"] in
+    (* let path, n =
+      all_double_paths_opt 26 g dist_array at_dist g.name_to_id.%["AA"]
+    in
+    let t1 = Unix.gettimeofday () in
+    Format.printf "%d (in %.4fms)@\n" n (1000. *. (t1 -. t0));
+    let t0 = Unix.gettimeofday () in *)
+    let _path2, n =
+      all_double_paths_opt 26 g dist_array at_dist g.name_to_id.%["AA"]
+    in
     let t1 = Unix.gettimeofday () in
     Format.printf "%d (in %.4fms)@\n" n (1000. *. (t1 -. t0))
+  (* debug g  _path2 []*)
 end
 
 let () = Solution.register_mod (module Sol)

@@ -1,6 +1,50 @@
 open Utils.Syntax.Hashtbl
 
-(* 2d movements *)
+(*
+
+
+
+        ...#               5
+        .#..              314
+        #...               2
+        ....
+...#.......#     6   1     1
+........#...    453 532   324
+..#....#....     1   6     6
+..........#.               2     2
+        ...#....          364   641
+        .....#..           5     5
+        .#......
+        ......#.
+
+
+
+*)
+module Edge = struct
+  type t = Left | Bottom | Right | Top
+
+  let to_int = function Left -> 0 | Bottom -> 1 | Right -> 2 | Top -> 3
+
+  let of_int = function
+    | 0 -> Left
+    | 1 -> Bottom
+    | 2 -> Right
+    | 3 -> Top
+    | _ -> assert false
+
+  let pp fmt =
+    let open Format in
+    function
+    | Left -> fprintf fmt "L"
+    | Bottom -> fprintf fmt "B"
+    | Right -> fprintf fmt "R"
+    | Top -> fprintf fmt "T"
+end
+
+module Move = struct
+  type t = Forward of int | Left | Right
+end
+
 let dirs = [ 0, 1; 1, 0; 0, -1; -1, 0 ]
 
 let char_of_idir = function
@@ -18,30 +62,17 @@ let int_of_dir d =
   loop 0 dirs
 
 type face = {
-  normal : int array; (* the normal unit vector, identifying the face *)
-  transform : int array array list;
-      (* the transform used for reaching the face from the first one *)
+  id : int;
+  adjacent : int array;
   pixels : ((int * int) * char) array array;
-      (* array of pixels containing the original point and char *)
-  rotation : int; (* number of times the face was rotated *)
-  connected : int array list;
+  coord : int * int;
 }
 
-let dummy_face =
-  { normal = [||]; transform = []; pixels = [||]; rotation = 0; connected = [] }
-
+let dummy_face = { coord = 0, 0; pixels = [||]; adjacent = [||]; id = -1 }
 let pp_vect fmt a = Format.fprintf fmt "<%d,%d,%d>" a.(0) a.(1) a.(2)
 
 type row = { start : int; length : int; row : Bytes.t }
-
-type grid = {
-  size : int;
-  rows : row array;
-  faces : (int array, face) Hashtbl.t;
-      (*map3d : (int array, info3d) Hashtbl.t; *)
-      (* maps topmost corner of a sizexsize square
-                                         to the dice number of the face. *)
-}
+type grid = { size : int; rows : row array; faces : (int, face) Hashtbl.t }
 
 let fail k = Format.ksprintf (fun s -> failwith s) k
 
@@ -71,94 +102,117 @@ let rec vertical_step2d grid len r c i =
   else vertical_step2d grid len nr c i
 
 (** unit movement i / j in -1/0/1 *)
-let step2d grid (r, c) (i, j) =
+let step2d grid (r, c) ((i, j) as dir) =
   assert ((i == 0 || j == 0) && -1 <= i && i <= 1 && -1 <= j && j <= 1);
   if i == 0 then
     (* horizontal move *)
     let row = array_get grid.rows r in
     let c = c - row.start in
-    r, row.start + ((c + j + row.length) mod row.length)
+    (r, row.start + ((c + j + row.length) mod row.length)), dir
   else
     (* vertical move *)
-    vertical_step2d grid.rows (Array.length grid.rows) r c i
+    vertical_step2d grid.rows (Array.length grid.rows) r c i, dir
 
 (* Based on a dice (-1) to have correct array indices. for each face we list the
    corresponding face we enter when leaving in that direction as well as the new
    direction on the 2D plane.
 
 *)
-module G3D = struct
-  (* convert a row, col to x,y,z vector *)
-  let to3d r c = [| c; r; 0 |]
+module Dice = struct
+  let faces =
+    [
+      (*    L  D  R  U *)
+      1, [| 3; 2; 4; 5 |];
+      2, [| 3; 6; 4; 1 |];
+      3, [| 1; 5; 6; 2 |];
+      4, [| 6; 5; 1; 2 |];
+      5, [| 4; 6; 3; 1 |];
+      6, [| 3; 5; 4; 2 |];
+    ]
 
-  (* rotation of pi2 around axes*)
-  let rxppi2 = [| [| 1; 0; 0 |]; [| 0; 0; -1 |]; [| 0; 1; 0 |] |]
-  let rxmpi2 = [| [| 1; 0; 0 |]; [| 0; 0; 1 |]; [| 0; -1; 0 |] |]
-  let ryppi2 = [| [| 0; 0; 1 |]; [| 0; 1; 0 |]; [| -1; 0; 0 |] |]
-  let rympi2 = [| [| 0; 0; -1 |]; [| 0; 1; 0 |]; [| 1; 0; 0 |] |]
-  let rzppi2 = [| [| 0; -1; 0 |]; [| 0; 1; 0 |]; [| 0; 0; 1 |] |]
-  let rzmpi2 = [| [| 0; 1; 0 |]; [| 0; -1; 0 |]; [| 0; 0; 1 |] |]
+  let index_of tab v =
+    let rec loop len i =
+      if i = len then raise Not_found
+      else if tab.(i) = v then i
+      else loop len (i + 1)
+    in
+    loop (Array.length tab) 0
 
-  (* unit vectors, used for identifying the faces *)
-  let pux = [| 1; 0; 0 |]
-  let mux = [| -1; 0; 0 |]
-  let puy = [| 0; 1; 0 |]
-  let muy = [| 0; -1; 0 |]
-  let puz = [| 0; 0; 1 |]
-  let muz = [| 0; 0; -1 |]
-  let order = [ puz; puy; mux; pux; muy; muz ]
-
-  let dice v =
-    let i = ref 0 in
-    let _ = List.find (fun w -> incr i; w = v) order in
-    !i
-
-  let vdice i = List.nth order (i - 1)
-
-  (* face relationships. For each face, give the one on the
-  right, below, left, above
-  *)
-  let cube =
-    ~%[
-        puz, [| pux; puy; mux; muy |];
-        muz, [| mux; muy; pux; puy |];
-        puy, [| pux; muz; mux; puz |];
-        muy, [| mux; puz; pux; muz |];
-        pux, [| muz; puy; puz; muy |];
-        mux, [| puz; puy; muz; muy |];
-      ]
-
-  let rotate_neighbors pos a =
-    let b = Array.copy a in
-    let i = if pos then -1 else 1 in
-    let len = Array.length a in
+  let align_faces tab v i =
+    let res = Array.copy tab in
+    let first = index_of tab v in
+    let len = Array.length tab in
     for j = 0 to len - 1 do
-      b.(j) <- a.((j + i + len) mod len)
+      res.((i + j) mod len) <- tab.((first + j) mod len)
     done;
-    b
-
-  let fold_down = rxppi2
-  let fold_up = rxmpi2
-  let fold_right = rympi2
-  let fold_left = ryppi2
-  let identity = [| [| 1; 0; 0 |]; [| 0; 1; 0 |]; [| 0; 0; 1 |] |]
-
-  let matrix_mult a b =
-    let rows = Array.length a in
-    let cols = Array.length b.(0) in
-    let result = Array.make_matrix rows cols 0 in
-    for i = 0 to rows - 1 do
-      for j = 0 to cols - 1 do
-        for k = 0 to Array.length b - 1 do
-          result.(i).(j) <- result.(i).(j) + (a.(i).(k) * b.(k).(j))
-        done
-      done
-    done;
-    result
-
-  let apply_transform vect l =
-    (List.fold_left (fun acc m -> matrix_mult acc m) [| vect |] l).(0)
+    res
 end
+
+let dummy_pos = (-1, -1), (0, 0)
+
+let pp_face_with_pos pos fmt f =
+  Format.fprintf fmt "id: %d@\n" f.id;
+  Format.fprintf fmt "adjacent:%s@\n"
+    (String.concat ", "
+       ((Array.mapi (fun i e ->
+             Format.asprintf "%d(%a)" e Edge.pp Edge.(of_int i)))
+          f.adjacent
+       |> Array.to_list));
+  Format.fprintf fmt "pixels:@\n";
+  Array.iteri
+    (fun i r ->
+      Array.iteri
+        (fun j (_, c) ->
+          let c =
+            let (a, b), dir = pos in
+            if a = i && b = j then char_of_idir (int_of_dir dir) else c
+          in
+          Format.fprintf fmt "%c" c)
+        r;
+      Format.fprintf fmt "@\n")
+    f.pixels
+
+let pp_face fmt f = pp_face_with_pos dummy_pos fmt f
+
+let prepare_faces g =
+  let faces_by_coords = ~%[] in
+  let () =
+    for r = 0 to (Array.length g.rows / g.size) - 1 do
+      let row = r * g.size in
+      for c = 0 to (g.rows.(row).length / g.size) - 1 do
+        let col = (c * g.size) + g.rows.(row).start in
+        let pixels = Array.make_matrix g.size g.size ((0, 0), ' ') in
+        for i = row to row + g.size - 1 do
+          for j = col to col + g.size - 1 do
+            pixels.(i - row).(j - col) <- (i, j), get g (i, j)
+          done
+        done;
+        Format.eprintf "FOUND FACE: %d, %d@\n%!" row col;
+        faces_by_coords.%[row, col] <- { dummy_face with pixels }
+      done
+    done
+  in
+  let rec loop_faces ((r, c) as coord) id parent par_edge =
+    let open Edge in
+    if faces_by_coords.%?[r, c] then begin
+      match faces_by_coords.%[r, c] with
+      | { adjacent = [||]; _ } ->
+          let adjacent =
+            Dice.align_faces (List.assoc id Dice.faces) parent (to_int par_edge)
+          in
+          let face = { (faces_by_coords.%[r, c]) with id; adjacent; coord } in
+          faces_by_coords.%[r, c] <- face;
+          g.faces.%[id] <- face;
+          loop_faces (r, c - g.size) adjacent.(to_int Left) id Right;
+          loop_faces (r, c + g.size) adjacent.(to_int Right) id Left;
+          loop_faces (r + g.size, c) adjacent.(to_int Bottom) id Top
+      | _ -> ()
+    end
+  in
+  loop_faces (0, g.rows.(0).start) 1
+    (List.assoc 1 Dice.faces).(Edge.(to_int Left))
+    Edge.Left;
+  faces_by_coords
 
 let rec apply_n f x n = if n = 0 then x else apply_n f (f x) (n - 1)
 let rotate_point len pos (i, j) = if pos then j, len - 1 - i else len - 1 - j, i
@@ -174,234 +228,40 @@ let rotate_pixels pos pixels =
   done;
   res
 
-let pp_face ?pos fmt f =
-  Format.fprintf fmt "normal: %a@\n" pp_vect f.normal;
-  Format.fprintf fmt "dice: %d@\n" (G3D.dice f.normal);
-  Format.fprintf fmt "rotation: %d@\n" (f.rotation mod 4);
-  Format.fprintf fmt "RN: %s@\n"
-    (G3D.cube.%[f.normal]
-    |> (fun a ->
-         apply_n (G3D.rotate_neighbors (f.rotation < 0)) a (abs f.rotation))
-    |> Array.map (fun a -> string_of_int (G3D.dice a))
-    |> Array.to_list |> String.concat ", ");
-  Format.fprintf fmt "Connected:%s@\n"
-    (String.concat ", "
-       (List.map (fun i -> string_of_int (G3D.dice i)) f.connected));
-  Format.fprintf fmt "pixels:@\n";
-  Array.iteri
-    (fun i r ->
-      Array.iteri
-        (fun j (_, c) ->
-          let c =
-            match pos with
-            | Some ((a, b), dir) when a = i && b = j ->
-                char_of_idir (int_of_dir dir)
-            | _ -> c
-          in
-          Format.fprintf fmt "%c" c)
-        r;
-      Format.fprintf fmt "@\n")
-    f.pixels
-(*
-    (apply_n (rotate_pixels (f.rotation > 0)) f.pixels (abs f.rotation)) *)
-
 let right (i, j) = j, -i
 let left (i, j) = -j, i
 
-let step_on_cube g face_id (r, c) ((i, j) as dir) =
+let step3d grid (face, (r, c)) ((i, j) as dir) =
+  let open Edge in
   let ((nr, nc) as npos) = r + i, c + j in
-  let dest, npos, _todo, ndir =
-    if nr < 0 || nr >= g.size || nc < 0 || nc >= g.size then
-      (* rotate orthogonal faces *)
-      let neighbors = G3D.cube.%[face_id] in
-      let face = g.faces.%[face_id] in
-      let di, dj =
-        apply_n
-          (if face.rotation < 0 then left else right)
-          dir (abs face.rotation)
-      in
-      match
-        apply_n
-          (G3D.rotate_neighbors (face.rotation < 0))
-          neighbors (abs face.rotation)
-      with
-      | [| fr; fd; fl; fu |] ->
-          let to_rpos, to_rneg, dest =
-            if di < 0 then (* cross top border *) fr, fl, fu
-            else if di > 0 then (* cross bottom border *) fl, fr, fd
-            else if dj < 0 then (* cross left border *) fu, fd, fl
-            else (*cross right border *) fd, fu, fr
-          in
-          let () =
-            Format.eprintf "SELECTING NEIBOURGH %d@\n%!" (G3D.dice dest)
-          in
-          let destf =
-            try g.faces.%[dest]
-            with Not_found ->
-              Format.eprintf "%a NOT FOUND@\n%!" pp_vect dest;
-              raise Not_found
-          in
-          let npos = (nr + g.size) mod g.size, (nc + g.size) mod g.size in
-          let npos, ndir =
-            if List.mem destf.normal face.connected then npos, dir
-            else
-              ( apply_n
-                  (rotate_point g.size (destf.rotation < 0))
-                  npos (abs destf.rotation),
-                apply_n
-                  (if destf.rotation < 0 then right else left)
-                  dir (abs destf.rotation) )
-          in
-          dest, npos, [ to_rpos, true; to_rneg, false ], ndir
-      | _ -> assert false
-    else face_id, npos, [], dir
-  in
-  let dest_face = g.faces.%[dest] in
-  let _, chr = dest_face.pixels.(fst npos).(snd npos) in
-  if chr = '#' then None
+  if nr >= 0 && nr < grid.size && nc >= 0 && nc < grid.size then
+    (face, npos), dir
   else
-    (*
-    let () =
-      List.iter
-        (fun (todo, pos) ->
-          let ftodo = g.faces.%[todo] in
-          g.faces.%[todo] <-
-            {
-              ftodo with
-              (*pixels = rotate_pixels pos ftodo.pixels *)
-              (*rotation = (ftodo.rotation + if pos then 1 else -1)*);
-            })
-        todo
-    in*)
-    Some (dest, npos, ndir)
+    let out_edge =
+      if j > 0 then Right
+      else if j < 0 then Left
+      else if i > 0 then Bottom
+      else Top
+    in
+    let nface_id = face.adjacent.(to_int out_edge) in
+    let nface = grid.faces.%[nface_id] in
+    let in_edge = of_int (Dice.index_of nface.adjacent face.id) in
 
-let step_on_cube g face_id (r, c) ((i, j) as dir) =
-  Format.eprintf "STEPPING FROM %d, %d by %d, %d ON FACE:@\n%!" r c i j;
-  let face = g.faces.%[face_id] in
-  let oi, oj =
-    apply_n (if face.rotation > 0 then right else left) dir (abs face.rotation)
-  in
-  Format.eprintf "ORIGINAL DIR: %d, %d@\n" oi oj;
-  Format.eprintf "%a@\n%!" (pp_face ~pos:((r, c), dir)) g.faces.%[face_id];
-  (*Format.eprintf "ALL FACES:@\n%!";
-  let l =
-    Hashtbl.fold
-      (fun _ face acc ->
-        Format.asprintf "%a@\n" (pp_face ~pos:((-1, -1), (0, 0))) face :: acc)
-      g.faces []
-  in
-  let l = List.map (String.split_on_char '\n') l in
-  let n = List.fold_left (fun acc l -> max acc (List.length l)) 0 l in
-  let l = ref l in
-  for _ = 0 to n - 1 do
-    l :=
-      List.map
-        (function
-          | [] -> []
-          | p :: l ->
-              Format.eprintf "%s" p;
-              Format.eprintf "%s" (String.make (20 - String.length p) ' ');
-              l)
-        !l;
-    Format.eprintf "@\n%!"
-  done; *)
+    match out_edge, in_edge with
+    | Left, Right | Right, Left -> (nface, (r, grid.size - c - 1)), dir
+    | Top, Bottom | Bottom, Top -> (nface, (grid.size - r - 1, c)), dir
+    | Top, Left | Bottom, Right -> (nface, (c, r)), right dir
+    | Left, Top | Right, Bottom -> (nface, (c, r)), left dir
+    | Right, Top | Left, Bottom ->
+        (nface, (grid.size - c - 1, grid.size - r - 1)), right dir
+    | Top, Right | Bottom, Left ->
+        (nface, (grid.size - c - 1, grid.size - r - 1)), left dir
+    | Bottom, Bottom | Top, Top ->
+        (nface, (r, grid.size - c - 1)), left (left dir)
+    | Right, Right | Left, Left ->
+        (nface, (grid.size - r - 1, c)), left (left dir)
 
-  let res = step_on_cube g face_id (r, c) dir in
-  let () =
-    match res with
-    | None -> Format.eprintf "STOPPED@\n%!"
-    | Some (dest, npos, ndir) ->
-        if dest <> face_id then Format.eprintf "CROSSING EDGE@\n%!";
-        Format.eprintf "SUCCESS: %d, %d, DIR %d, %d ON FACE:@\n" (fst npos)
-          (snd npos) (fst ndir) (snd ndir);
-        Format.eprintf "%a@\n%!" (pp_face ~pos:(npos, ndir)) g.faces.%[dest]
-  in
-  Format.eprintf "@\n----@\n%!";
-  res
-
-let forward_on_cube g face_id pos dir n =
-  let rec loop face_id pos dir i =
-    if i = 0 then face_id, pos, dir
-    else
-      match step_on_cube g face_id pos dir with
-      | None -> face_id, pos, dir
-      | Some (nface_id, npos, ndir) -> loop nface_id npos ndir (i - 1)
-  in
-  loop face_id pos dir n
-
-type move = Forward of int | Left | Right
-
-let walk_on_cube g moves =
-  let rec loop face_id pos dir l =
-    match l with
-    | [] -> face_id, pos, dir
-    | Left :: ll -> loop face_id pos (left dir) ll
-    | Right :: ll -> loop face_id pos (right dir) ll
-    | Forward n :: ll ->
-        let nface_id, npos, ndir = forward_on_cube g face_id pos dir n in
-        loop nface_id npos ndir ll
-  in
-  loop G3D.puz (0, 0) (0, 1) moves
-
-let init_faces g =
-  let r_orig, c_orig = 0, g.rows.(0).start in
-  let faces_by_coords = ~%[] in
-  for r = 0 to (Array.length g.rows / g.size) - 1 do
-    let row = r * g.size in
-    for c = 0 to (g.rows.(row).length / g.size) - 1 do
-      let col = (c * g.size) + g.rows.(row).start in
-      let rdiff = (row - r_orig) / g.size in
-      let cdiff = (col - c_orig) / g.size in
-      let rf = rdiff * g.size in
-      let cf = cdiff * g.size in
-      let pixels = Array.make_matrix g.size g.size ((0, 0), ' ') in
-      let () =
-        for i = 0 to g.size - 1 do
-          for j = 0 to g.size - 1 do
-            pixels.(i).(j) <-
-              ( (row + i, col + j),
-                bytes_get g.rows.(row + i).row (col + j - g.rows.(row + 1).start)
-              )
-          done
-        done
-      in
-      faces_by_coords.%[rf, cf] <- { dummy_face with pixels };
-      Format.eprintf "Found face: %d, %d@\n" rf cf
-    done
-  done;
-  let rec loop_faces (r, c) rotation acc =
-    if faces_by_coords.%?[r, c] then begin
-      match faces_by_coords.%[r, c] with
-      | { transform = []; _ } as face ->
-          Format.eprintf "Processing face %d, %d@\n%!" r c;
-          let normal = G3D.apply_transform [| 0; 0; 1 |] acc in
-          Format.eprintf "Found normal vector: %a@\n%!" pp_vect normal;
-          g.faces.%[normal] <- { face with rotation; transform = acc; normal };
-          faces_by_coords.%[r, c] <- g.faces.%[normal];
-
-          loop_faces (r, c - g.size) (rotation + 1) (G3D.fold_left :: acc);
-          loop_faces (r, c + g.size) (rotation - 1) (G3D.fold_right :: acc);
-          loop_faces (r + g.size, c) rotation (G3D.fold_down :: acc)
-      | _ -> ()
-    end
-  in
-  loop_faces (0, 0) 0 [ G3D.identity ];
-  Hashtbl.iter
-    (fun (r, c) _ ->
-      let connected =
-        List.filter_map
-          (fun pos ->
-            if faces_by_coords.%?[pos] then Some faces_by_coords.%[pos].normal
-            else None)
-          [ r - g.size, c; r + g.size, c; r, c - g.size; r, c + g.size ]
-      in
-      g.faces.%[faces_by_coords.%[r, c].normal] <-
-        { (g.faces.%[faces_by_coords.%[r, c].normal]) with connected })
-    faces_by_coords;
-  Format.eprintf "Final face data:@\n";
-  Hashtbl.iter
-    (fun _ f -> Format.eprintf "%a" (pp_face ~pos:((-1, -1), (0, 0))) f)
-    g.faces
+let p3d_to_2d (face, (row, col)) = fst face.pixels.(row).(col)
 
 (* Main part *)
 
@@ -413,11 +273,15 @@ let pp_grid ?(map = dummy) fmt grid =
       Format.fprintf fmt "%s" (String.make row.start ' ');
       for i = 0 to row.length - 1 do
         let c = row.start + i in
-        let chr =
-          try char_of_idir (int_of_dir map.%[r, c])
-          with Not_found -> get grid (r, c)
+        let chr, pre, post =
+          try
+            let dir, color = map.%[r, c] in
+            ( char_of_idir (int_of_dir dir),
+              Format.sprintf "\x1b[0;3%dm" color,
+              "\x1b[0m" )
+          with Not_found -> get grid (r, c), "", ""
         in
-        Format.fprintf fmt "%c" chr
+        Format.fprintf fmt "%s%c%s" pre chr post
       done;
       Format.fprintf fmt "@\n")
     grid.rows
@@ -448,9 +312,9 @@ let load_level () =
               Buffer.contents buff |> String.split_on_char ';'
               |> List.filter_map (function
                    | "" -> None
-                   | "L" -> Some Left
-                   | "R" -> Some Right
-                   | i -> Some (Forward (int_of_string i))) )
+                   | "L" -> Some Move.Left
+                   | "R" -> Some Move.Right
+                   | i -> Some (Move.Forward (int_of_string i))) )
           else
             (* grid *)
             let start = min (index_of line '.') (index_of line '#') in
@@ -463,30 +327,33 @@ let load_level () =
   let rows = accg |> List.rev |> Array.of_list in
   let num_rows = Array.fold_left (fun acc row -> acc + row.length) 0 rows in
   let size = isqrt (num_rows / 6) in
-  Format.eprintf "SIZE: %d@\n%!" size;
   assert (size * size * 6 = num_rows);
   { rows; size; faces = ~%[] }, acco
 
 let path = ~%[]
+let color = ref 0
 
 let forward step to2d grid pos dir n =
-  let rec loop pos n =
-    path.%[to2d pos] <- dir;
-    if n = 0 then pos
+  let rec loop pos dir n =
+    path.%[to2d pos] <- dir, !color;
+    if n = 0 then pos, dir
     else
-      let npos = step grid pos dir in
+      let npos, ndir = step grid pos dir in
       let c = get grid (to2d npos) in
-      if c = '#' then pos else loop npos (n - 1)
+      if c = '#' then pos, dir else loop npos ndir (n - 1)
   in
-  loop pos n
+  color := ((!color + 1) mod 5) + 1;
+  loop pos dir n
 
 let walk step init_pos to2d grid orders =
   let rec loop pos dir l =
     match l with
     | [] -> pos, dir
-    | Left :: ll -> loop pos (left dir) ll
-    | Right :: ll -> loop pos (right dir) ll
-    | Forward n :: ll -> loop (forward step to2d grid pos dir n) dir ll
+    | Move.Left :: ll -> loop pos (left dir) ll
+    | Move.Right :: ll -> loop pos (right dir) ll
+    | Move.Forward n :: ll ->
+        let npos, ndir = forward step to2d grid pos dir n in
+        loop npos ndir ll
   in
   loop init_pos (0, 1) orders
 
@@ -505,11 +372,12 @@ module Sol = struct
 
   let solve_part2 () =
     let grid, moves = load_level () in
-    let () = init_faces grid in
-    let face_id, (r, c), d = walk_on_cube grid moves in
-    let (r, c), _ = grid.faces.%[face_id].pixels.(r).(c) in
-    let d = int_of_dir d in
-    Format.eprintf "%d, %d, %d, @\n%!" (r + 1) (c + 1) d;
+    let _ = prepare_faces grid in
+    let init = grid.faces.%[1], (0, 0) in
+    let fpos, dir = walk step3d init p3d_to_2d grid moves in
+    let r, c = p3d_to_2d fpos in
+    let d = int_of_dir dir in
+    Format.eprintf "%a@\n%!" (pp_grid ~map:path) grid;
     let res = (1000 * (1 + r)) + (4 * (1 + c)) + d in
     Format.printf "%d@\n%!" res
 end

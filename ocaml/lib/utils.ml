@@ -95,10 +95,12 @@ module GraphAlgo (Graph : GRAPH) = struct
   end
 
   let path_length t last =
-    let rec loop acc v =
-      match t.%[v] with v2 -> loop (1 + acc) v2 | exception Not_found -> acc
+    let rec loop acc_c acc_p v =
+      match t.%[v] with
+      | v2 -> loop (1 + acc_c) (v2 :: acc_p) v2
+      | exception Not_found -> acc_c, acc_p
     in
-    loop 0 last
+    loop 0 [ last ] last
 
   let add_dist d1 d2 =
     let d = d1 + d2 in
@@ -131,7 +133,7 @@ module GraphAlgo (Graph : GRAPH) = struct
         for d' = 1 to d - 1 do
           try
             Graph.iter_vertices g (fun k ->
-                if dist.%[i, k] == d' && dist.%[k, j] == d - d' && d >=0 then begin
+                if dist.%[i, k] == d' && dist.%[k, j] == d - d' && d >= 0 then begin
                   dist_array.(d') <- Some k; raise_notrace Exit
                 end)
           with Exit -> ()

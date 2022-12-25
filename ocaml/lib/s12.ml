@@ -54,9 +54,9 @@ module Algo = GraphAlgo (Graph)
 
 let find_all g finish targets =
   let t0 = Unix.gettimeofday () in
-  let finish_map = ~%(List.map (fun t -> t, max_int) targets) in
+  let finish_map = ~%(List.map (fun t -> t, (max_int,[])) targets) in
   let () = Algo.dijkstra g finish finish_map in
-  let s = Hashtbl.fold (fun _ s acc -> min acc s) finish_map max_int in
+  let s = Hashtbl.fold (fun _ (s,_) acc -> min acc s) finish_map max_int in
   let t1 = Unix.gettimeofday () in
   Format.printf "%d (%fms)@\n" s (1000. *. (t1 -. t0))
 

@@ -35,10 +35,16 @@ module type GRAPH = sig
 end
 
 module GraphAlgo (Graph : GRAPH) : sig
-  val dijkstra : Graph.t -> Graph.v -> (Graph.v, int) Hashtbl.t -> unit
+  val dijkstra
+    :  Graph.t ->
+    Graph.v ->
+    (Graph.v, int * Graph.v list) Hashtbl.t ->
+    unit
+
   val floyd_warshall : Graph.t -> (Graph.v * Graph.v, int) Hashtbl.t
 
   val reverse_floyd_warshall
-    :  Graph.t -> (Graph.v * Graph.v, int) Hashtbl.t ->
+    :  Graph.t ->
+    (Graph.v * Graph.v, int) Hashtbl.t ->
     (Graph.v * Graph.v, Graph.v option array) Hashtbl.t
 end

@@ -59,9 +59,34 @@ let need_ore_robot bp c =
          (max bp.clay_robot_cost
             (max bp.obsidian_robot_cost bp.geode_robot_cost)))
 
+let has_robot_for cost c =
+  let open Resource in
+  (get_ore cost = 0 || c.ore_robot > 0)
+  && (get_clay cost = 0 || c.clay_robot > 0)
+  && (get_obs cost = 0 || c.obsidian_robot > 0)
+
+let div_sup a b = (a / b) + if a mod b = 0 then 0 else 1
+
 let pay_robot cost c =
   let open Resource in
-  if c.resource >=: cost then Some { c with resource = c.resource -: cost }
+  if c.resource >=: cost then Some (1, { c with resource = c.resource -: cost })
+  else if has_robot_for cost c then
+    let ore_c = get_ore cost in
+    let clay_c = get_clay cost in
+    let obs_c = get_obs cost in
+    let ore_c =
+      if ore_c = 0 then 0 else div_sup (ore_c - get_ore c.resource) c.ore_robot
+    in
+    let clay_c =
+      if clay_c = 0 then 0
+      else div_sup (clay_c - get_clay c.resource) c.clay_robot
+    in
+    let obs_c =
+      if obs_c = 0 then 0
+      else div_sup (obs_c - get_obs c.resource) c.obsidian_robot
+    in
+    let d = max ore_c (max clay_c obs_c) + 1 in
+    Some (d, { c with resource = c.resource -: cost })
   else None
 
 let incr_ore_robot c = { c with ore_robot = c.ore_robot + 1 }
@@ -82,14 +107,6 @@ let incr_obsidian_robot c = { c with obsidian_robot = c.obsidian_robot + 1 }
 let need_geode_robot _ _ = true (* we need them !*)
 let incr_geode_robot c = { c with geode_robot = c.geode_robot + 1 }
 
-(* a noop action that allows us to wait *)
-let need_nop _ _ = true
-let noop c = Some c
-let incr_noop c = c
-
-let all_robots bp c =
-  not (need_ore_robot bp c || need_clay_robot bp c || need_obsidian_robot bp c)
-
 (* compute (since I'm lazy) the number of geode we can produce in d days
      at full capacity knowing that one geode robot is produced each day *)
 let max_geode_prudction c d =
@@ -102,17 +119,18 @@ let operations bp =
     need_obsidian_robot, pay_robot bp.obsidian_robot_cost, incr_obsidian_robot;
     need_clay_robot, pay_robot bp.clay_robot_cost, incr_clay_robot;
     need_ore_robot, pay_robot bp.ore_robot_cost, incr_ore_robot;
-    need_nop, noop, incr_noop;
   |]
 
 (* update the production *)
-let update c =
+let update d c =
   let open Resource in
   {
     c with
     resource =
-      c.resource +: (c.ore_robot *: ore) +: (c.clay_robot *: clay)
-      +: (c.obsidian_robot *: obsidian);
+      c.resource
+      +: (d * c.ore_robot *: ore)
+      +: (d * c.clay_robot *: clay)
+      +: (d * c.obsidian_robot *: obsidian);
   }
 
 let simulate n blueprint start =
@@ -136,13 +154,14 @@ let simulate n blueprint start =
                 (fun acc (need, pay, incr) ->
                   if need blueprint config then
                     match pay config with
-                    | Some nconfig ->
-                        let nconfig = update nconfig in
+                    | Some (d, nconfig) ->
+                        let d = min d (n - i + 1) in
+                        let nconfig = update d nconfig in
                         (* update production *)
-                        let geode = geode + nconfig.geode_robot in
+                        let geode = geode + (d * nconfig.geode_robot) in
                         let nconfig = incr nconfig in
                         (* obtain the robot after update *)
-                        max acc (loop (i + 1) nconfig geode)
+                        max acc (loop (i + d) nconfig geode)
                     | None -> acc
                   else acc)
                 geode operations

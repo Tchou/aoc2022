@@ -228,20 +228,6 @@ let prepare_faces g =
     Edge.Left;
   faces_by_coords
 
-let rec apply_n f x n = if n = 0 then x else apply_n f (f x) (n - 1)
-let rotate_point len pos (i, j) = if pos then j, len - 1 - i else len - 1 - j, i
-
-let rotate_pixels pos pixels =
-  let len = Array.length pixels in
-  let res = Array.make_matrix len len pixels.(0).(0) in
-  for i = 0 to len - 1 do
-    for j = 0 to len - 1 do
-      let ni, nj = rotate_point len pos (i, j) in
-      res.(i).(j) <- pixels.(ni).(nj)
-    done
-  done;
-  res
-
 let right (i, j) = j, -i
 let left (i, j) = -j, i
 

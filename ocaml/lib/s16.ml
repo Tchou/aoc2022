@@ -14,6 +14,15 @@ module BitSet = struct
       if mem i s then res := i :: !res
     done;
     !res
+
+  let length s =
+    let rec loop c s = if s == 0 then c else loop (c + 1) (s land (s - 1)) in
+    loop 0 s
+
+  let pp len fmt s =
+    for i = 1 to len do
+      Format.fprintf fmt "%d" ((s lsr (len - i)) land 1)
+    done
 end
 
 module Graph = struct
@@ -112,61 +121,45 @@ module Algo = Utils.GraphAlgo (Graph)
 
 let bint = function false -> 0 | true -> 1
 
-let pack_simple_info ni v vset elephant =
-  vset land 0xffffffff
-  lor ((v land 0xffff) lsl 32)
-  lor ((ni land 0xff) lsl 48)
-  lor (bint elephant lsl 56)
+let pack_simple_info ni v vset =
+  vset land 0xffffffff lor ((v land 0xffff) lsl 32) lor ((ni land 0xff) lsl 48)
 
 let unpack_vset info = info land 0xffffffff
 let unpack_i info = (info lsr 48) land 0xff
 let unpack_simple_node info = (info lsr 32) land 0xffff
-let unpack_elephant info = (info lsr 56) land 1 != 0
-let set_elephant info = info lor (1 lsl 56)
 
-let all_simple_paths_opt n (g : Graph.t) dist root use_elephant =
+let all_simple_paths n (g : Graph.t) dist root =
   let open Graph in
-  let cache = ~%[] in
-  let all_valves = Hashtbl.fold (fun _ n acc -> n + acc) g.valves 0 in
+  let max_for_vset = ~%[] in
   let global_max = ref 0 in
+  let all_valves = Hashtbl.fold (fun _ n acc -> acc + n) g.valves 0 in
   let rec loop i info total vval =
     let vset = unpack_vset info in
-    let elephant = unpack_elephant info in
-    if i == 0 then begin
-      if elephant || not use_elephant then begin
-        global_max := max total !global_max;
-        total
-      end
-      else loop n (pack_simple_info n root vset true) total vval
-    end
+    global_max := max total !global_max;
+    max_for_vset.%[vset] <-
+      max total (try max_for_vset.%[vset] with Not_found -> 0);
+    if i == 0 then total
     else
-      try total + cache.%[info]
-      with Not_found ->
-        let v = unpack_simple_node info in
-        let res =
-          if
-            total
-            + (i + if use_elephant && not elephant then n else 0)
-              * (all_valves - vval)
-            < !global_max
-          then total
-          else
-            fold_absent_valves g
-              (fun acc w ->
-                let vset = BitSet.add w vset in
-                let d = dist.(v).(w) in
-                let w_flow_rate = g.valves.%[w] in
-                let d = max (i - d) 0 in
-                let total = total + (d * w_flow_rate) in
-                let ninfo = pack_simple_info d w vset elephant in
-                let vval = vval + w_flow_rate in
-                max acc (loop d ninfo total vval))
-              total vset
-        in
-        cache.%[info] <- res - total;
-        res
+      let v = unpack_simple_node info in
+      let res =
+        if total + (i * (all_valves - vval)) < !global_max then total
+        else
+          fold_absent_valves g
+            (fun acc w ->
+              let vset = BitSet.add w vset in
+              let d = dist.(v).(w) in
+              let w_flow_rate = g.valves.%[w] in
+              let d = max (i - d) 0 in
+              let total = total + (d * w_flow_rate) in
+              let ninfo = pack_simple_info d w vset in
+              let vval = vval + w_flow_rate in
+              max acc (loop d ninfo total vval))
+            total vset
+      in
+      res
   in
-  loop n (pack_simple_info n root BitSet.empty false) 0 0
+  let _ = loop n (pack_simple_info n root BitSet.empty) 0 0 in
+  max_for_vset, !global_max
 
 let load_level () =
   let rates = ref [] in
@@ -213,7 +206,7 @@ let load_level () =
   in
   g
 
-let solve len use_elephant =
+let prepare () =
   let g = load_level () in
   let dist = Algo.floyd_warshall g in
   let dist_array =
@@ -221,17 +214,43 @@ let solve len use_elephant =
     Array.make_matrix len len max_int
   in
   let () = Hashtbl.iter (fun (i, j) d -> dist_array.(i).(j) <- d) dist in
-  let t0 = Unix.gettimeofday () in
-  let n =
-    all_simple_paths_opt len g dist_array g.name_to_id.%["AA"] use_elephant
-  in
-  let t1 = Unix.gettimeofday () in
-  Format.printf "%d (in %.4fms)@\n" n (1000. *. (t1 -. t0))
+  g, dist_array
 
 module Sol = struct
   let name = "16"
-  let solve_part1 () = solve 30 false
-  let solve_part2 () = solve 26 true
+
+  let solve_part1 () =
+    let g, dist_array = prepare () in
+    let t0 = Unix.gettimeofday () in
+    let _, n = all_simple_paths 30 g dist_array g.name_to_id.%["AA"] in
+    let t1 = Unix.gettimeofday () in
+    Format.eprintf "%fms@\n%!" (1000. *. (t1 -. t0));
+    Format.printf "%d@\n%!" n
+
+  let solve_part2 () =
+    let g, dist_array = prepare () in
+    let t0 = Unix.gettimeofday () in
+    let max_for_valves, _ =
+      all_simple_paths 26 g dist_array g.name_to_id.%["AA"]
+    in
+    let max_cost = ref 0 in
+    let entries = max_for_valves |> Hashtbl.to_seq |> Array.of_seq in
+    let () =
+      let all_bits = g.valve_mask lor 1 in
+      for i = 0 to Array.length entries - 1 do
+        let config1, n1 = entries.(i) in
+        let vset1 = unpack_vset config1 in
+        for j = i + 1 to Array.length entries - 1 do
+          let config2, n2 = entries.(j) in
+          let vset2 = unpack_vset config2 in
+          if lnot vset1 lor lnot vset2 land all_bits = all_bits then
+            max_cost := max !max_cost (n1 + n2)
+        done
+      done
+    in
+    let t1 = Unix.gettimeofday () in
+    Format.eprintf "%fms@\n%!" (1000. *. (t1 -. t0));
+    Format.printf "%d@\n%!" !max_cost
 end
 
 let () = Solution.register_mod (module Sol)

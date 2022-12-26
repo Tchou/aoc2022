@@ -6,6 +6,7 @@ module Resource = struct
   let ( +: ) (a, b, c) (d, e, f) = a + d, b + e, c + f
   let ( -: ) (a, b, c) (d, e, f) = a - d, b - e, c - f
   let ( *: ) d (a, b, c) = a * d, b * d, c * d
+  let ( >=: ) (a, b, c) (d, e, f) = a >= d && b >= e && c >= f
   let zero = 0, 0, 0
   let ore = 1, 0, 0
   let clay = 0, 1, 0
@@ -59,8 +60,9 @@ let need_ore_robot bp c =
             (max bp.obsidian_robot_cost bp.geode_robot_cost)))
 
 let pay_robot cost c =
-  if c.resource >= cost then
-    Some { c with resource = Resource.(c.resource -: cost) }
+  let open Resource in
+  if c.resource >=: cost then
+    Some { c with resource = c.resource -: cost }
   else None
 
 let incr_ore_robot c = { c with ore_robot = c.ore_robot + 1 }

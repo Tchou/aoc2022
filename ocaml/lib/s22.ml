@@ -1,7 +1,22 @@
 open Utils.Syntax.Hashtbl
 
 (*
-
+For Part two the following approach is used :
+- consider that your cube is a (playing) dice. Such a dice as the constraints
+  that opposite faces add up to 7.
+- this constraints make it so that for a given dice, when the orientation of two
+  faces are known, then the others are fully determined.
+- So first, create a map of a regular dice, this is Dice.faces below. In this
+  table, for each face we write the number of the face left, below, right and
+  above it.
+- then we start with a DFS on the top-most left most face in the grid. We fix it
+  arbitrarily to be face number 1 oriented with 3,2,4,5 left,below,right and top
+  of it. Then during a dfs, we go left of the current face, right of the current
+  face and below.
+- Say we find a face below: We know the face we came from and we know it was
+  above the current face. We use this information to realign the faces from our
+  table (by doing a circular rotation of the array of the other faces until it
+  matches). With that we can number each face and its neighbours:
 
 
         ...#               5
@@ -17,9 +32,42 @@ open Utils.Syntax.Hashtbl
         .#......
         ......#.
 
-
-
+- once this information is prepared, walking is easy. If we cross an edge,
+  say the right of face 1, we know that we end up on face 4. Further we know
+  we crossed from the right edge of 1 to arrive on the left edge of 4, since
+  in face 4, the 1 is on the right. This tells us how to translate the coordinates
+  from the starting face to the destination one.
 *)
+module Dice = struct
+  let faces =
+    [
+      (*    L  D  R  U *)
+      1, [| 3; 2; 4; 5 |];
+      2, [| 3; 6; 4; 1 |];
+      3, [| 1; 5; 6; 2 |];
+      4, [| 6; 5; 1; 2 |];
+      5, [| 4; 6; 3; 1 |];
+      6, [| 3; 5; 4; 2 |];
+    ]
+
+  let index_of tab v =
+    let rec loop len i =
+      if i = len then raise Not_found
+      else if tab.(i) = v then i
+      else loop len (i + 1)
+    in
+    loop (Array.length tab) 0
+
+  let align_faces tab v i =
+    let res = Array.copy tab in
+    let first = index_of tab v in
+    let len = Array.length tab in
+    for j = 0 to len - 1 do
+      res.((i + j) mod len) <- tab.((first + j) mod len)
+    done;
+    res
+end
+
 module Edge = struct
   type t = Left | Bottom | Right | Top
 
@@ -113,40 +161,6 @@ let step2d grid (r, c) ((i, j) as dir) =
     (* vertical move *)
     vertical_step2d grid.rows (Array.length grid.rows) r c i, dir
 
-(* Based on a dice (-1) to have correct array indices. for each face we list the
-   corresponding face we enter when leaving in that direction as well as the new
-   direction on the 2D plane.
-
-*)
-module Dice = struct
-  let faces =
-    [
-      (*    L  D  R  U *)
-      1, [| 3; 2; 4; 5 |];
-      2, [| 3; 6; 4; 1 |];
-      3, [| 1; 5; 6; 2 |];
-      4, [| 6; 5; 1; 2 |];
-      5, [| 4; 6; 3; 1 |];
-      6, [| 3; 5; 4; 2 |];
-    ]
-
-  let index_of tab v =
-    let rec loop len i =
-      if i = len then raise Not_found
-      else if tab.(i) = v then i
-      else loop len (i + 1)
-    in
-    loop (Array.length tab) 0
-
-  let align_faces tab v i =
-    let res = Array.copy tab in
-    let first = index_of tab v in
-    let len = Array.length tab in
-    for j = 0 to len - 1 do
-      res.((i + j) mod len) <- tab.((first + j) mod len)
-    done;
-    res
-end
 
 let dummy_pos = (-1, -1), (0, 0)
 

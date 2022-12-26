@@ -61,8 +61,7 @@ let need_ore_robot bp c =
 
 let pay_robot cost c =
   let open Resource in
-  if c.resource >=: cost then
-    Some { c with resource = c.resource -: cost }
+  if c.resource >=: cost then Some { c with resource = c.resource -: cost }
   else None
 
 let incr_ore_robot c = { c with ore_robot = c.ore_robot + 1 }
